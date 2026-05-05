@@ -6,6 +6,7 @@
 
 # 导入必要的库
 import os
+import threading
 from itertools import combinations
 
 # 直接导入，减少不必要的检查
@@ -60,8 +61,8 @@ class Config:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
     MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "yolov8n-pose.pt")
-    # 使用摄像头作为输入源
-    SOURCE = 0
+    # 多摄像头支持 - 启动时自动检测可用摄像头
+    SOURCES = []  # 启动时由 detect_cameras() 填充
     RESULT_VIDEO_PATH = os.path.join(PROJECT_ROOT, "results", "security_result.mp4")
     DATASET_DIR = os.path.join(PROJECT_ROOT, "backend", "data")
 
@@ -110,6 +111,29 @@ class Config:
         'card_bg': (50, 50, 50),
         'card_border': (60, 60, 60)
     }
+
+
+# ===================== 摄像头自动检测 =====================
+def detect_cameras(max_index=5):
+    """扫描USB设备索引0~max_index，返回可用摄像头列表"""
+    available = []
+    print("正在扫描可用摄像头...")
+    for i in range(max_index + 1):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                available.append(i)
+                print(f"  ✓ 摄像头 {i} 可用")
+            cap.release()
+        else:
+            cap.release()
+    if not available:
+        print("  ✗ 未检测到USB摄像头，将使用默认索引0")
+        available = [0]
+    else:
+        print(f"共检测到 {len(available)} 个摄像头: {available}")
+    return available
 
 
 # ===================== 工具函数 =====================
@@ -929,26 +953,15 @@ class SecurityMonitor:
     def __init__(self):
         self.config = Config()
 
+        # 自动检测可用摄像头
+        self.config.SOURCES = detect_cameras(max_index=5)
+
         self.detection_module = DetectionModule(self.config)
         self.data_saver = DataSaver(self.config)
         self.alert_manager = AlertManager(self.config)
         self.ui_manager = UIManager(self.config)
 
         self.model = YOLO(self.config.MODEL_PATH)
-
-        # 初始化视频源
-        self.use_static_image, self.cap, self.frame_width, self.frame_height = self._init_video_source()
-        if self.use_static_image:
-            # 创建一个测试图像
-            self.test_image = np.zeros((720, 1280, 3), dtype=np.uint8)
-            cv2.putText(self.test_image, "Test Image", (500, 360), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
-
-        # 初始化窗口 - 16:9 舒适比例
-        cv2.namedWindow("Security Detection System", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Security Detection System", 1600, 900)  # 16:9 比例
-
-        # 初始化视频写入器
-        self.out, self.expected_frame_size = self._init_video_writer()
 
         # 是否启用 web 视频流
         self.enable_web_stream = HAS_REQUESTS
@@ -960,21 +973,20 @@ class SecurityMonitor:
         self.web_stream_width = 960  # 发送到web的帧宽度
         self.web_stream_height = 540  # 发送到web的帧高度 (16:9)
 
-    def _init_video_source(self):
+        # 多摄像头线程控制
+        self._stop_event = threading.Event()
+        self._threads = []
+
+    def _init_video_source(self, source=0):
         """初始化视频源"""
         cap = None
         try:
-            cap = cv2.VideoCapture(self.config.SOURCE)
+            cap = cv2.VideoCapture(source)
             if not cap.isOpened():
-                print("视频源打开失败，尝试使用默认视频源...")
-                # 尝试使用一个默认的视频源
-                cap = cv2.VideoCapture(0)
-                if not cap.isOpened():
-                    print("默认视频源也无法打开，使用静态图像进行测试...")
-                    return True, None, 1280, 720
-            
+                print(f"视频源 {source} 打开失败")
+                return True, None, 1280, 720
+
             # 设置摄像头参数
-            # type: ignore[attr-defined]
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -985,7 +997,7 @@ class SecurityMonitor:
             frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             return False, cap, frame_width, frame_height
         except Exception as e:
-            print(f"初始化视频源时出错: {e}")
+            print(f"初始化视频源 {source} 时出错: {e}")
             return True, None, 1280, 720
 
     def _init_video_writer(self):
@@ -1014,33 +1026,29 @@ class SecurityMonitor:
 
         return out, (new_frame_width, new_frame_height)
 
-    def send_frame_to_web(self, frame: np.ndarray) -> bool:
-        """发送原始视频帧到 web 服务器 - 优化版本"""
+    def send_frame_to_web(self, frame: np.ndarray, cam: str = "0") -> bool:
+        """发送原始视频帧到 web 服务器 - 支持多摄像头"""
         if not self.enable_web_stream or self.session is None:
             return False
 
         try:
-            # 调整帧大小以减少数据量 - 使用GPU加速
+            # 调整帧大小以减少数据量
             frame_resized = cv2.resize(frame, (self.web_stream_width, self.web_stream_height))
 
             # 压缩帧为 JPEG，使用较低质量以提高速度
             encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
             _, img_encoded = cv2.imencode('.jpg', frame_resized, encode_params)
 
-            # 打印发送信息
-            print(f"发送帧到: {WEB_SERVER_URL}/api/update_frame")
-            
-            # 使用连接池发送 POST 请求
+            # 使用连接池发送 POST 请求，附带摄像头ID
             response = self.session.post(
                 f"{WEB_SERVER_URL}/api/update_frame",
                 files={'frame': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')},
-                timeout=0.5  # 减少超时时间
+                data={'cam': cam},
+                timeout=0.5
             )
-            print(f"发送成功，状态码: {response.status_code}")
             return response.status_code == 200
-        except Exception as e:
-            # 发送失败不报错，静默处理
-            print(f"发送失败: {str(e)}")
+        except Exception:
+            # 发送失败静默处理
             return False
 
     def report_model_info(self):
@@ -1072,158 +1080,198 @@ class SecurityMonitor:
             pass  # 静默失败
 
     def run(self):
-        """主运行循环"""
-        print("系统启动...按Enter退出")
+        """主运行循环 - 多摄像头模式"""
+        sources = self.config.SOURCES
+        if not sources:
+            print("没有可用的摄像头，退出。")
+            return
+
+        print(f"\n系统启动，共 {len(sources)} 个摄像头: {sources}")
+        print("按 Enter 退出系统\n")
         if self.enable_web_stream:
             print(f"视频流将发送到: {WEB_SERVER_URL}")
 
-        start_time = time.time()
-        frame_count = 0
-        last_model_info_time = 0
-
         # 启动时报告模型信息
         self.report_model_info()
-        last_model_info_time = time.time()
 
-        # 初始化变量
+        # 为每个摄像头启动独立线程
+        self._threads = []
+        for cam_id in sources:
+            t = threading.Thread(target=self._run_camera_thread, args=(cam_id,), daemon=True)
+            t.start()
+            self._threads.append(t)
+
+        # 主线程等待退出信号
+        try:
+            while not self._stop_event.is_set():
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            print("\n收到中断信号，正在停止...")
+            self._stop_event.set()
+
+        # 等待所有线程结束
+        for t in self._threads:
+            t.join(timeout=3)
+
+        cv2.destroyAllWindows()
+        print("系统已退出")
+
+    def _get_frame_from_cap(self, cap, use_static, test_image):
+        """从指定摄像头获取视频帧"""
+        if use_static:
+            return test_image.copy(), use_static
+        try:
+            ret, frame = cap.read()
+            if not ret:
+                print("无法获取视频帧，切换到静态图像模式...")
+                return test_image.copy(), True
+            return frame, False
+        except Exception as e:
+            print(f"读取视频帧时出错: {e}")
+            return test_image.copy(), True
+
+    def _run_camera_thread(self, cam_id):
+        """单个摄像头的检测循环（在线程中运行）"""
+        source = int(cam_id)
+        cam_str = str(cam_id)
+        print(f"[摄像头 {cam_str}] 线程启动，视频源: {source}")
+
+        # 初始化视频源
+        use_static, cap, frame_width, frame_height = self._init_video_source(source)
+        if use_static:
+            test_image = np.zeros((720, 1280, 3), dtype=np.uint8)
+            cv2.putText(test_image, f"Camera {cam_str}", (400, 360), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+        else:
+            test_image = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+        # 每个摄像头独立的会话
+        session = requests.Session() if HAS_REQUESTS else None
+
+        # 状态变量
         prev_centers = []
         last_move_times = []
         eye_fatigue_counts = []
         gather_start_times = {}
         logs = []
         prev_actions = []
+        frame_count = 0
+        start_time = time.time()
+        last_model_info_time = time.time()
 
-        while True:
-            # 1. 从视频源读取一帧或使用静态图像
-            frame = self._get_frame()
-            frame_count += 1
+        # 窗口名（每个摄像头独立窗口）
+        window_name = f"Camera {cam_str}"
 
-            # 2. 使用模型进行推理 - 优化版本
-            results = self.model(
-                frame,
-                imgsz=self.config.IMG_SIZE,
-                conf=self.config.CONF_THRESH,
-                device=self.config.DEVICE,
-                half=torch.cuda.is_available(),  # 使用半精度推理，提高速度
-                batch=False  # 单帧处理，但使用半精度
+        try:
+            while not self._stop_event.is_set():
+                # 1. 读取帧
+                frame, use_static = self._get_frame_from_cap(cap, use_static, test_image)
+                if use_static and cap is not None:
+                    cap.release()
+                    cap = None
+                frame_count += 1
+
+                # 2. 模型推理
+                results = self.model(
+                    frame,
+                    imgsz=self.config.IMG_SIZE,
+                    conf=self.config.CONF_THRESH,
+                    device=self.config.DEVICE,
+                    half=torch.cuda.is_available(),
+                    batch=False
+                )
+
+                # 3. 检测行为
+                actions, person_num, fighting_persons, fatigued_persons, eye_fatigued_persons, prev_centers, last_move_times, eye_fatigue_counts, action_confidences, gather_start_times = self.detection_module.detect_security_actions(
+                    results, prev_centers, last_move_times, eye_fatigue_counts, gather_start_times
+                )
+
+                # 4. 可视化关键点
+                frame_out = results[0].plot() if results and len(results) > 0 else frame.copy()
+
+                # 5. 框选打架人员
+                if "打架" in actions and results and len(results) > 0:
+                    self._draw_fighting_persons(results[0], fighting_persons, frame_out)
+
+                # 6. 标红疲劳人员
+                if "疲劳" in actions and results and len(results) > 0:
+                    all_fatigued = list(set(fatigued_persons + eye_fatigued_persons))
+                    self._draw_fatigued_persons(results[0], all_fatigued, frame_out)
+
+                # 7. 绘制人员聚集框
+                if "人员聚集" in actions and results and len(results) > 0:
+                    all_kp = []
+                    for r in results:
+                        if r.keypoints is not None:
+                            for kp in r.keypoints.data:
+                                all_kp.append(kp.cpu().numpy() if hasattr(kp, 'cpu') else kp)
+                    if len(all_kp) >= self.config.GATHER_THRESHOLD:
+                        self._draw_gathering_persons(results[0], all_kp, frame_out)
+
+                # 8. 发送帧到 web（带摄像头ID）
+                if frame_count % SEND_FRAME_INTERVAL == 0 and session is not None:
+                    self._send_frame_session(frame, cam_str, session)
+
+                # 9. 日志
+                current_time_str = time.strftime("%H:%M:%S")
+                for action in actions:
+                    if action not in prev_actions:
+                        log_entry = f"[{current_time_str}] [CAM-{cam_str}] {action}"
+                        logs.append(log_entry)
+                prev_actions = actions.copy()
+
+                # 10. FPS
+                elapsed = time.time() - start_time
+                fps = frame_count / elapsed if elapsed > 0 else 0
+
+                # 11. 每60秒报告模型信息（仅摄像头0负责）
+                now = time.time()
+                if cam_str == "0" and now - last_model_info_time > 60:
+                    self.report_model_info()
+                    last_model_info_time = now
+
+                # 12. 绘制UI
+                is_alarm = "跌倒" in actions or "打架" in actions
+                frame_out = self._draw_ui(frame_out, is_alarm, actions, logs, action_confidences, person_num, fps)
+
+                # 13. 显示
+                cv2.imshow(window_name, frame_out)
+
+                # 14. 保存检测数据（仅摄像头0负责，避免重复）
+                if cam_str == "0" and frame_count % self.config.SAVE_INTERVAL == 0:
+                    timestamp = self.data_saver.save_detection_data(actions, person_num, fps, frame_count)
+                    if actions:
+                        self.data_saver.save_frame_image(frame, actions, timestamp)
+
+                # 15. 检查退出（任意窗口按Enter退出全部）
+                key = cv2.waitKey(1) & 0xFF
+                if key == 13:
+                    print(f"[摄像头 {cam_str}] 收到退出信号，停止所有摄像头...")
+                    self._stop_event.set()
+                    break
+
+        except Exception as e:
+            print(f"[摄像头 {cam_str}] 线程异常: {e}")
+        finally:
+            if cap is not None:
+                cap.release()
+            if session is not None:
+                session.close()
+            print(f"[摄像头 {cam_str}] 线程结束")
+
+    def _send_frame_session(self, frame, cam, session):
+        """使用指定会话发送帧到web服务器"""
+        try:
+            frame_resized = cv2.resize(frame, (self.web_stream_width, self.web_stream_height))
+            encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
+            _, img_encoded = cv2.imencode('.jpg', frame_resized, encode_params)
+            session.post(
+                f"{WEB_SERVER_URL}/api/update_frame",
+                files={'frame': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')},
+                data={'cam': cam},
+                timeout=0.5
             )
-
-            # 3. 检测行为
-            actions, person_num, fighting_persons, fatigued_persons, eye_fatigued_persons, prev_centers, last_move_times, eye_fatigue_counts, action_confidences, gather_start_times = self.detection_module.detect_security_actions(
-                results, prev_centers, last_move_times, eye_fatigue_counts, gather_start_times
-            )
-
-            # 4. 可视化关键点
-            frame_out = results[0].plot() if results and len(results) > 0 else frame.copy()
-
-            # 5. 框选打架人员
-            if "打架" in actions and results and len(results) > 0:
-                self._draw_fighting_persons(results[0], fighting_persons, frame_out)
-
-            # 6. 标红疲劳人员的关键点（包含眼疲劳和运动疲劳）
-            if "疲劳" in actions and results and len(results) > 0:
-                all_fatigued = list(set(fatigued_persons + eye_fatigued_persons))
-                self._draw_fatigued_persons(results[0], all_fatigued, frame_out)
-
-            # 7. 绘制人员聚集框
-            if "人员聚集" in actions and results and len(results) > 0:
-                kp_list = [r.keypoints.data[j].cpu().numpy() if hasattr(r.keypoints.data[j], 'cpu') else r.keypoints.data[j]
-                           for j in range(len(r.keypoints.data))]
-                # 重新收集本帧所有关键点
-                all_kp = []
-                for r in results:
-                    if r.keypoints is not None:
-                        for kp in r.keypoints.data:
-                            all_kp.append(kp.cpu().numpy() if hasattr(kp, 'cpu') else kp)
-                if len(all_kp) >= self.config.GATHER_THRESHOLD:
-                    self._draw_gathering_persons(results[0], all_kp, frame_out)
-
-            # 8. 发送原始帧到 web 服务器（不带标记的纯净视频）
-            if frame_count % SEND_FRAME_INTERVAL == 0:
-                self.send_frame_to_web(frame)
-
-            # 8. 检查行为变化，添加日志记录
-            current_time = time.strftime("%H:%M:%S")
-            for action in actions:
-                if action not in prev_actions:
-                    log_entry = f"[{current_time}] {action}"
-                    logs.append(log_entry)
-            prev_actions = actions.copy()
-
-            # 10. 计算FPS
-            current_time = time.time()
-            fps = frame_count / (current_time - start_time)
-
-            # 10.5 每60秒报告一次模型信息
-            if current_time - last_model_info_time > 60:
-                self.report_model_info()
-                last_model_info_time = current_time
-
-            # 11. 绘制UI
-            is_alarm = "跌倒" in actions or "打架" in actions
-            frame_out = self._draw_ui(frame_out, is_alarm, actions, logs, action_confidences, person_num, fps)
-
-            # 12. 显示和保存
-            cv2.imshow("Security Detection System", frame_out)
-
-            # 视频写入（带错误处理）
-            if self.out is not None:
-                try:
-                    # 验证帧尺寸
-                    actual_h, actual_w = frame_out.shape[:2]
-                    expected_w, expected_h = self.expected_frame_size
-
-                    if actual_w != expected_w or actual_h != expected_h:
-                        # 调整帧尺寸以匹配视频写入器
-                        frame_out = cv2.resize(frame_out, self.expected_frame_size)
-
-                    self.out.write(frame_out)
-                except Exception as e:
-                    print(f"视频写入错误: {e}")
-
-            # 10. 保存检测数据
-            if frame_count % self.config.SAVE_INTERVAL == 0:
-                timestamp = self.data_saver.save_detection_data(actions, person_num, fps, frame_count)
-                if actions:
-                    self.data_saver.save_frame_image(frame, actions, timestamp)
-
-            # 11. 检查退出
-            key = cv2.waitKey(1) & 0xFF
-            if key == 13:  # Enter键
-                print("系统正在退出...")
-                break
-
-        # 释放资源
-        if not self.use_static_image and self.cap is not None:
-            self.cap.release()
-        if self.out is not None:
-            self.out.release()
-        cv2.destroyAllWindows()
-
-    def _get_frame(self):
-        """获取视频帧"""
-        if self.use_static_image:
-            return self.test_image.copy()
-        else:
-            try:
-                ret, frame = self.cap.read()
-                if not ret:
-                    print("无法获取视频帧，切换到静态图像模式...")
-                    # 切换到静态图像模式
-                    self.use_static_image = True
-                    # 创建一个测试图像
-                    self.test_image = np.zeros((720, 1280, 3), dtype=np.uint8)
-                    cv2.putText(self.test_image, "Test Image", (500, 360), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
-                    return self.test_image.copy()
-                return frame
-            except Exception as e:
-                print(f"读取视频帧时出错: {e}")
-                # 切换到静态图像模式
-                self.use_static_image = True
-                # 创建一个测试图像
-                self.test_image = np.zeros((720, 1280, 3), dtype=np.uint8)
-                cv2.putText(self.test_image, "Test Image", (500, 360), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
-                return self.test_image.copy()
+        except Exception:
+            pass
 
     def _draw_fighting_persons(self, result, fighting_persons, frame_out):
         """框选打架人员"""

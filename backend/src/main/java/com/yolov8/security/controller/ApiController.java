@@ -42,6 +42,17 @@ public class ApiController {
         this.appConfig = appConfig;
     }
 
+    @GetMapping("/stats/summary")
+    public ResponseEntity<Map<String, Object>> getStatsSummary() {
+        try {
+            Map<String, Object> summary = detectionService.getStatsSummary();
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("Error getting stats summary", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @GetMapping("/stats")
     public ResponseEntity<StatsResponse> getStats() {
         try {
@@ -161,12 +172,13 @@ public class ApiController {
     }
 
     @PostMapping("/update_frame")
-    public ResponseEntity<Map<String, Object>> updateFrame(@RequestParam("frame") MultipartFile frame) {
+    public ResponseEntity<Map<String, Object>> updateFrame(
+            @RequestParam("frame") MultipartFile frame,
+            @RequestParam(value = "cam", required = false, defaultValue = "0") String cam) {
         try {
-            // 将视频帧传递给VideoStreamController
             ByteArrayInputStream bais = new ByteArrayInputStream(frame.getBytes());
             BufferedImage frameImg = ImageIO.read(bais);
-            videoStreamController.updateFrame(frameImg);
+            videoStreamController.updateFrame(frameImg, cam);
             
             Map<String, Object> result = Map.of(
                 "status", "success",

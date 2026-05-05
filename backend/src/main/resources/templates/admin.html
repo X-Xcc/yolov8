@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后台管理 - 监狱智能行为分析系统</title>
+    <script>
+    (function() {
+        var token = sessionStorage.getItem('auth_token') || localStorage.getItem('auth_token');
+        if (!token) { window.location.href = '/yolov8-security/login'; }
+    })();
+    </script>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+        --bg:#f0f2f5;--sidebar-bg:#fff;--sidebar-w:200px;--topbar-h:52px;
+        --card-bg:#fff;--border:#e4e6eb;--border-light:#f0f1f3;
+        --text-primary:#1a1d21;--text-secondary:#656d76;--text-muted:#a5acb4;
+        --accent:#0969da;--accent-bg:rgba(9,105,218,.08);--accent-hover:rgba(9,105,218,.05);
+        --green:#1a7f37;--green-bg:rgba(26,127,55,.1);
+        --red:#cf222e;--red-bg:rgba(207,34,46,.1);
+        --orange:#bf8700;--orange-bg:rgba(191,135,0,.1);
+        --purple:#8250df;--purple-bg:rgba(130,80,223,.1);
+        --shadow-sm:0 1px 2px rgba(0,0,0,.06);
+        --shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04);
+        --shadow-md:0 4px 12px rgba(0,0,0,.1),0 0 0 1px rgba(0,0,0,.04);
+        --radius:8px;--radius-sm:6px;--radius-lg:10px;
+    }
+    [data-theme="dark"]{
+        --bg:#0d1117;--sidebar-bg:#161b22;--card-bg:#161b22;
+        --border:#21262d;--border-light:#1c2128;
+        --text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#484f58;
+        --accent:#58a6ff;--accent-bg:rgba(88,166,255,.12);--accent-hover:rgba(88,166,255,.06);
+        --green:#3fb950;--green-bg:rgba(63,185,80,.12);
+        --red:#f85149;--red-bg:rgba(248,81,73,.12);
+        --orange:#d29922;--orange-bg:rgba(210,153,34,.12);
+        --purple:#bc8cff;--purple-bg:rgba(188,140,255,.12);
+        --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+        --shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 1px rgba(0,0,0,.2);
+        --shadow-md:0 4px 12px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.2);
+    }
+    body{font-family:'Inter',-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text-primary);min-height:100vh;font-size:13px;-webkit-font-smoothing:antialiased}
+
+    .layout{display:flex;min-height:100vh}
+    .sidebar{width:var(--sidebar-w);background:var(--sidebar-bg);border-right:1px solid var(--border);position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;overflow-y:auto}
+    .sidebar::-webkit-scrollbar{width:0}
+    .sidebar-logo{height:var(--topbar-h);padding:0 14px;display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--border);flex-shrink:0}
+    .sidebar-logo-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--accent),#8250df);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .sidebar-logo-text{font-size:12px;font-weight:700;color:var(--text-primary);line-height:1.3}
+    .sidebar-logo-sub{font-size:9px;color:var(--text-muted);font-weight:400}
+    .sidebar-section{padding:6px 6px 4px}
+    .sidebar-section-label{font-size:9px;font-weight:600;color:var(--text-muted);letter-spacing:.8px;text-transform:uppercase;padding:4px 8px 5px}
+    .sidebar-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s;user-select:none;text-decoration:none;margin-bottom:1px;position:relative}
+    .sidebar-item:hover{background:var(--accent-hover);color:var(--accent)}
+    .sidebar-item.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+    .sidebar-item .icon{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;background:rgba(0,0,0,.04)}
+    .sidebar-item.active .icon{background:rgba(9,105,218,.15)}
+    .sidebar-item::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:0;background:var(--accent);border-radius:0 2px 2px 0;transition:height .2s}
+    .sidebar-item.active::before{height:18px}
+    .sidebar-footer{margin-top:auto;padding:10px 6px;border-top:1px solid var(--border);flex-shrink:0}
+    .sidebar-user{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
+    .sidebar-user:hover{background:var(--accent-hover)}
+    .sidebar-avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
+    .sidebar-user-name{font-size:11px;font-weight:600;color:var(--text-primary);line-height:1.2}
+    .sidebar-user-role{font-size:9px;color:var(--text-muted)}
+
+    .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh}
+    .topbar{height:var(--topbar-h);background:var(--sidebar-bg);border-bottom:1px solid var(--border);padding:0 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;backdrop-filter:blur(8px);background:rgba(255,255,255,.85)}
+    [data-theme="dark"] .topbar{background:rgba(22,27,34,.85)}
+    .topbar-left{display:flex;align-items:center;gap:16px}
+    .topbar-breadcrumb{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted)}
+    .topbar-breadcrumb .current{color:var(--text-primary);font-weight:600}
+    .topbar-right{display:flex;align-items:center;gap:6px}
+    .topbar-btn{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--card-bg);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:13px}
+    .topbar-btn:hover{background:var(--accent-hover);color:var(--accent);border-color:var(--accent)}
+    .page{padding:18px 22px;flex:1}
+    .page-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;position:relative;padding-left:11px}
+    .page-title-row::before{content:'';position:absolute;left:0;top:0;width:3px;height:100%;background:var(--accent);border-radius:2px}
+    .page-title{font-size:15px;font-weight:700;color:var(--text-primary)}
+    .page-desc{font-size:11px;color:var(--text-muted);margin-top:2px}
+
+    .card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;transition:all .2s;margin-bottom:16px}
+    .card:hover{box-shadow:var(--shadow-md)}
+    .card-header{padding:11px 15px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between}
+    .card-title{font-size:12px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:6px}
+    .card-body{padding:15px}
+
+    .btn{padding:4px 11px;border-radius:var(--radius-sm);font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--card-bg);color:var(--text-secondary);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:4px}
+    .btn:hover{background:var(--bg);color:var(--text-primary);border-color:#b0b5bd}
+    .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .btn-primary:hover{background:#0860ca}
+    .btn-success{background:var(--green-bg);border-color:rgba(26,127,55,.2);color:var(--green)}
+    .btn-danger{background:var(--red-bg);border-color:rgba(207,34,46,.2);color:var(--red)}
+    .btn-sm{padding:2px 7px;font-size:10px}
+    .btn-group{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+
+    .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+    .badge-blue{background:var(--accent-bg);color:var(--accent)}
+    .badge-green{background:var(--green-bg);color:var(--green)}
+    .badge-red{background:var(--red-bg);color:var(--red)}
+    .badge-orange{background:var(--orange-bg);color:var(--orange)}
+    .badge-gray{background:var(--bg);color:var(--text-muted)}
+    .badge-dot::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
+
+    table{width:100%;border-collapse:collapse}
+    th{padding:7px 11px;text-align:left;font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;background:var(--bg);border-bottom:1px solid var(--border)}
+    td{padding:8px 11px;font-size:11px;color:var(--text-secondary);border-bottom:1px solid var(--border-light)}
+    tr:last-child td{border-bottom:none}
+    tr{transition:background .15s}
+    tr:hover td{background:var(--accent-hover)}
+
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .form-group{margin-bottom:14px}
+    .form-label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:5px;display:block}
+    .form-input,.form-select,.form-textarea{width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:12px;outline:none;transition:all .15s;font-family:inherit}
+    .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+    .form-textarea{resize:vertical;min-height:80px}
+    .form-help{font-size:10px;color:var(--text-muted);margin-top:3px}
+
+    .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .setting-item{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-light)}
+    .setting-label{font-size:11px;font-weight:600;color:var(--text-primary)}
+    .setting-desc{font-size:9px;color:var(--text-muted);margin-top:1px}
+    .setting-val{font-size:12px;font-weight:700;color:var(--accent)}
+
+    .toast-container{position:fixed;top:64px;right:14px;z-index:1000;display:flex;flex-direction:column;gap:5px}
+    .toast{padding:8px 13px;border-radius:var(--radius);background:var(--card-bg);border:1px solid var(--border);font-size:11px;font-weight:500;color:var(--text-primary);box-shadow:var(--shadow-md);animation:toastIn .25s ease;display:flex;align-items:center;gap:7px;min-width:220px}
+    .toast.success{border-color:rgba(26,127,55,.3);background:#f6fff8}
+    .toast.error{border-color:rgba(207,34,46,.3);background:#fff5f5}
+    .toast.info{border-color:rgba(9,105,218,.2);background:#f6faff}
+    @keyframes toastIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+
+    .modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center}
+    .modal-overlay.show{display:flex}
+    .modal{background:var(--card-bg);border-radius:var(--radius-lg);width:480px;max-width:90vw;box-shadow:var(--shadow-md);animation:modalIn .2s ease}
+    .modal-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .modal-title{font-size:13px;font-weight:700}
+    .modal-close{width:26px;height:26px;border-radius:5px;border:none;background:var(--bg);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .modal-close:hover{background:var(--red-bg);color:var(--red)}
+    .modal-body{padding:16px}
+    .modal-footer{padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:7px}
+    @keyframes modalIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+
+    @keyframes slideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .card{animation:slideUp .3s ease both}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    @media(max-width:1100px){.settings-grid,.form-row{grid-template-columns:1fr}}
+    @media(max-width:800px){:root{--sidebar-w:0px}.sidebar{width:0;overflow:hidden}.main{margin-left:0}}
+    </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">🛡</div>
+        <div>
+            <div class="sidebar-logo-text">YoloV8 Security</div>
+            <div class="sidebar-logo-sub">后台管理</div>
+        </div>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">管理</div>
+        <div class="sidebar-item active" onclick="switchTab(this,'settings')">
+            <div class="icon">⚙</div><span>系统设置</span>
+        </div>
+        <div class="sidebar-item" onclick="switchTab(this,'users')">
+            <div class="icon">👤</div><span>用户管理</span>
+        </div>
+        <div class="sidebar-item" onclick="switchTab(this,'data')">
+            <div class="icon">💾</div><span>数据管理</span>
+        </div>
+        <div class="sidebar-item" onclick="switchTab(this,'devices')">
+            <div class="icon">📹</div><span>设备管理</span>
+        </div>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">导航</div>
+        <div class="sidebar-item" onclick="location.href='/yolov8-security/index'">
+            <div class="icon">📊</div><span>返回看板</span>
+        </div>
+        <div class="sidebar-item" onclick="location.href='/yolov8-security/monitor'">
+            <div class="icon">🖥</div><span>监控大屏</span>
+        </div>
+    </div>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">
+            <div class="sidebar-avatar">陈</div>
+            <div>
+                <div class="sidebar-user-name">陈明</div>
+                <div class="sidebar-user-role">超级管理员</div>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+    <header class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-breadcrumb">
+                <span>首页</span>
+                <span style="color:#ccc">/</span>
+                <span class="current">后台管理</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <button class="topbar-btn" id="themeToggle" title="切换主题" onclick="toggleTheme()">🌙</button>
+            <button class="topbar-btn" title="返回看板" onclick="location.href='/yolov8-security/index'">📊</button>
+        </div>
+    </header>
+
+    <!-- TAB: SETTINGS -->
+    <div class="page" id="tab-settings">
+        <div class="page-title-row">
+            <div><div class="page-title">系统设置</div><div class="page-desc">检测参数、告警规则、AI模型配置</div></div>
+            <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="card-title">🔍 检测参数</div></div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">置信度阈值</label>
+                        <input type="number" class="form-input" id="setConfidence" value="0.5" min="0" max="1" step="0.05">
+                        <div class="form-help">检测置信度低于此值的结果将被过滤 (0-1)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">IOU阈值</label>
+                        <input type="number" class="form-input" id="setIou" value="0.45" min="0" max="1" step="0.05">
+                        <div class="form-help">NMS的IOU阈值，越低去重越严格</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">检测间隔 (ms)</label>
+                        <input type="number" class="form-input" id="setInterval" value="100" min="50" max="5000" step="50">
+                        <div class="form-help">每帧检测的最小间隔时间</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">最大检测人数</label>
+                        <input type="number" class="form-input" id="setMaxPeople" value="50" min="1" max="200">
+                        <div class="form-help">单帧最大检测人数上限</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="card-title">🚨 告警规则</div></div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">跌倒检测灵敏度</label>
+                        <select class="form-select" id="setFallSensitivity">
+                            <option value="high">高 - 误报多但不漏检</option>
+                            <option value="medium" selected>中 - 平衡</option>
+                            <option value="low">低 - 减少误报</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">打架检测灵敏度</label>
+                        <select class="form-select" id="setFightSensitivity">
+                            <option value="high">高</option>
+                            <option value="medium" selected>中</option>
+                            <option value="low">低</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">告警冷却时间 (秒)</label>
+                        <input type="number" class="form-input" id="setAlertCooldown" value="30" min="5" max="300">
+                        <div class="form-help">同一类型告警的最小触发间隔</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">疲劳检测阈值 (秒)</label>
+                        <input type="number" class="form-input" id="setFatigueThreshold" value="60" min="10" max="600">
+                        <div class="form-help">持续同一姿态超过此时间判定为疲劳</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="card-title">🤖 AI模型配置</div></div>
+            <div class="card-body">
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <div><div class="setting-label">YOLOv8 模型</div><div class="setting-desc">当前加载的检测模型</div></div>
+                        <div class="setting-val">yolov8n-pose.pt</div>
+                    </div>
+                    <div class="setting-item">
+                        <div><div class="setting-label">Qwen2.5-VL</div><div class="setting-desc">场景分析大模型</div></div>
+                        <div class="setting-val" id="qwenStatus">检查中</div>
+                    </div>
+                    <div class="setting-item">
+                        <div><div class="setting-label">推理设备</div><div class="setting-desc">GPU/CPU</div></div>
+                        <div class="setting-val" id="modelDeviceSetting">N/A</div>
+                    </div>
+                    <div class="setting-item">
+                        <div><div class="setting-label">模型精度</div><div class="setting-desc">FP32/FP16/INT8</div></div>
+                        <div class="setting-val" id="modelPrecisionSetting">N/A</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: USERS -->
+    <div class="page" id="tab-users" style="display:none">
+        <div class="page-title-row">
+            <div><div class="page-title">用户管理</div><div class="page-desc">系统用户账号管理</div></div>
+            <button class="btn btn-primary" onclick="showAddUserModal()">+ 添加用户</button>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">👤 用户列表</div>
+                <span class="badge badge-gray" id="userCount">0 个用户</span>
+            </div>
+            <div style="overflow-x:auto">
+                <table>
+                    <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>状态</th><th>最后登录</th><th>操作</th></tr></thead>
+                    <tbody id="userTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: DATA -->
+    <div class="page" id="tab-data" style="display:none">
+        <div class="page-title-row">
+            <div><div class="page-title">数据管理</div><div class="page-desc">检测数据、截图、存储管理</div></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">📊 数据统计</div></div>
+            <div class="card-body">
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <div><div class="setting-label">检测记录</div><div class="setting-desc">JSON检测文件总数</div></div>
+                        <div class="setting-val" id="dataTotalDetections">--</div>
+                    </div>
+                    <div class="setting-item">
+                        <div><div class="setting-label">截图文件</div><div class="setting-desc">frame_*.jpg 文件数</div></div>
+                        <div class="setting-val" id="dataTotalImages">--</div>
+                    </div>
+                    <div class="setting-item">
+                        <div><div class="setting-label">存储占用</div><div class="setting-desc">data目录大小</div></div>
+                        <div class="setting-val" id="dataStorageSize">--</div>
+                    </div>
+                    <div class="setting-item">
+                        <div><div class="setting-label">视频文件</div><div class="setting-desc">videos目录</div></div>
+                        <div class="setting-val" id="dataVideoCount">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">🔧 数据操作</div></div>
+            <div class="card-body">
+                <div class="btn-group" style="gap:10px">
+                    <button class="btn btn-success" onclick="exportAllData()">📤 导出全部数据 (CSV)</button>
+                    <button class="btn" onclick="openDataFolder()">📂 打开数据目录</button>
+                    <button class="btn btn-danger" onclick="confirmClearData()">🗑 清空所有数据</button>
+                </div>
+                <div style="margin-top:12px;font-size:10px;color:var(--text-muted)">⚠ 清空操作将删除所有检测记录和截图，不可恢复</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: DEVICES -->
+    <div class="page" id="tab-devices" style="display:none">
+        <div class="page-title-row">
+            <div><div class="page-title">设备管理</div><div class="page-desc">摄像头和检测设备管理</div></div>
+            <button class="btn btn-primary" onclick="showAddDeviceModal()">+ 添加设备</button>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">📹 摄像头设备</div></div>
+            <div style="overflow-x:auto">
+                <table>
+                    <thead><tr><th>编号</th><th>名称</th><th>类型</th><th>地址</th><th>区域</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody id="deviceTableBody">
+                        <tr>
+                            <td>CAM-001</td><td>主摄像头</td><td>USB</td><td>设备索引 0</td><td>主监控区</td>
+                            <td><span class="badge badge-green badge-dot">在线</span></td>
+                            <td><button class="btn btn-sm" onclick="editDevice(0)">编辑</button></td>
+                        </tr>
+                        <tr>
+                            <td>CAM-002</td><td>走廊摄像头</td><td>RTSP</td><td>rtsp://192.168.1.100:554/stream1</td><td>A区走廊</td>
+                            <td><span class="badge badge-gray badge-dot">未连接</span></td>
+                            <td><button class="btn btn-sm" onclick="editDevice(1)">编辑</button></td>
+                        </tr>
+                        <tr>
+                            <td>CAM-003</td><td>操场摄像头</td><td>RTSP</td><td>rtsp://192.168.1.101:554/stream1</td><td>B区操场</td>
+                            <td><span class="badge badge-gray badge-dot">未连接</span></td>
+                            <td><button class="btn btn-sm" onclick="editDevice(2)">编辑</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">ℹ 设备说明</div></div>
+            <div class="card-body" style="font-size:11px;color:var(--text-secondary);line-height:1.8">
+                <p><strong>USB摄像头</strong>: 使用设备索引（0, 1, 2...）连接本地摄像头</p>
+                <p><strong>RTSP流</strong>: 使用RTSP地址连接网络摄像头，格式: rtsp://IP:端口/路径</p>
+                <p><strong>视频文件</strong>: 使用本地视频文件路径模拟摄像头输入</p>
+                <p style="margin-top:8px;color:var(--text-muted)">修改设备配置后需要重启Python检测服务才能生效</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="modalTitle">提示</div>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-footer" id="modalFooter"></div>
+    </div>
+</div>
+
+<script>
+const API_BASE = '/yolov8-security';
+
+function setTxt(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+}
+
+async function authFetch(url, opts={}) {
+    const token = sessionStorage.getItem('auth_token') || localStorage.getItem('auth_token');
+    const headers = {...(opts.headers||{})};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(url, {...opts, headers});
+    if (res.status === 401) { sessionStorage.clear(); window.location.href = API_BASE + '/login'; }
+    return res;
+}
+
+/* THEME */
+function initTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    updateThemeIcon(saved);
+}
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateThemeIcon(next);
+}
+function updateThemeIcon(theme) {
+    const btn = document.getElementById('themeToggle');
+    if (btn) btn.textContent = theme === 'dark' ? '☀' : '🌙';
+}
+initTheme();
+
+/* NAV */
+function switchTab(el, tab) {
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    if (el) el.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+    const target = document.getElementById('tab-' + tab);
+    if (target) target.style.display = 'block';
+}
+
+/* TOAST */
+function toast(msg, type='info') {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    const icons = {success:'✅',error:'❌',info:'ℹ️',warning:'⚠'};
+    t.className = 'toast '+(type||'info');
+    t.innerHTML = (icons[type]||'ℹ️')+' '+msg;
+    c.appendChild(t);
+    setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300)},3500);
+}
+
+/* MODAL */
+function openModal(title, body, footer) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = body;
+    document.getElementById('modalFooter').innerHTML = footer||'';
+    document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('show'); }
+document.getElementById('modalOverlay').addEventListener('click', e=>{if(e.target===document.getElementById('modalOverlay'))closeModal()});
+
+/* SETTINGS */
+function saveSettings() {
+    const settings = {
+        confidence: document.getElementById('setConfidence').value,
+        iou: document.getElementById('setIou').value,
+        interval: document.getElementById('setInterval').value,
+        maxPeople: document.getElementById('setMaxPeople').value,
+        fallSensitivity: document.getElementById('setFallSensitivity').value,
+        fightSensitivity: document.getElementById('setFightSensitivity').value,
+        alertCooldown: document.getElementById('setAlertCooldown').value,
+        fatigueThreshold: document.getElementById('setFatigueThreshold').value
+    };
+    localStorage.setItem('detection_settings', JSON.stringify(settings));
+    toast('设置已保存', 'success');
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('detection_settings');
+    if (saved) {
+        try {
+            const s = JSON.parse(saved);
+            if (s.confidence) document.getElementById('setConfidence').value = s.confidence;
+            if (s.iou) document.getElementById('setIou').value = s.iou;
+            if (s.interval) document.getElementById('setInterval').value = s.interval;
+            if (s.maxPeople) document.getElementById('setMaxPeople').value = s.maxPeople;
+            if (s.fallSensitivity) document.getElementById('setFallSensitivity').value = s.fallSensitivity;
+            if (s.fightSensitivity) document.getElementById('setFightSensitivity').value = s.fightSensitivity;
+            if (s.alertCooldown) document.getElementById('setAlertCooldown').value = s.alertCooldown;
+            if (s.fatigueThreshold) document.getElementById('setFatigueThreshold').value = s.fatigueThreshold;
+        } catch(e) {}
+    }
+}
+
+/* USERS */
+const DEFAULT_USERS = [
+    { username:'xx', name:'陈明', role:'超级管理员', status:'在线', lastLogin:'2026-05-04 10:30:00' },
+    { username:'operator1', name:'张伟', role:'操作员', status:'离线', lastLogin:'2026-05-03 18:00:00' },
+    { username:'guard1', name:'李强', role:'值班员', status:'离线', lastLogin:'2026-05-03 08:00:00' }
+];
+
+function getUsers() {
+    const saved = localStorage.getItem('system_users');
+    if (saved) { try { return JSON.parse(saved) } catch(e) {} }
+    return DEFAULT_USERS;
+}
+
+function saveUsers(users) {
+    localStorage.setItem('system_users', JSON.stringify(users));
+}
+
+function renderUsers() {
+    const users = getUsers();
+    const tbody = document.getElementById('userTableBody');
+    if (!tbody) return;
+    setTxt('userCount', users.length + ' 个用户');
+    tbody.innerHTML = users.map((u, i) => `<tr>
+        <td style="font-weight:600">${u.username}</td>
+        <td>${u.name}</td>
+        <td><span class="badge ${u.role==='超级管理员'?'badge-blue':'badge-green'}">${u.role}</span></td>
+        <td><span class="badge ${u.status==='在线'?'badge-green':'badge-gray'} badge-dot">${u.status}</span></td>
+        <td style="font-size:10px;font-family:monospace">${u.lastLogin}</td>
+        <td>
+            <button class="btn btn-sm" onclick="editUser(${i})">编辑</button>
+            ${u.username!=='xx'?`<button class="btn btn-sm btn-danger" onclick="deleteUser(${i})">删除</button>`:''}
+        </td>
+    </tr>`).join('');
+}
+
+function showAddUserModal() {
+    openModal('添加用户', `
+        <div class="form-group"><label class="form-label">用户名</label><input type="text" class="form-input" id="newUsername" placeholder="登录用户名"></div>
+        <div class="form-group"><label class="form-label">姓名</label><input type="text" class="form-input" id="newName" placeholder="真实姓名"></div>
+        <div class="form-group"><label class="form-label">密码</label><input type="password" class="form-input" id="newPassword" placeholder="登录密码"></div>
+        <div class="form-group"><label class="form-label">角色</label><select class="form-select" id="newRole"><option value="操作员">操作员</option><option value="值班员">值班员</option><option value="管理员">管理员</option></select></div>
+    `, `<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="addUser()">添加</button>`);
+}
+
+function addUser() {
+    const username = document.getElementById('newUsername').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const role = document.getElementById('newRole').value;
+    if (!username || !name) { toast('请填写用户名和姓名', 'error'); return; }
+    const users = getUsers();
+    if (users.find(u => u.username === username)) { toast('用户名已存在', 'error'); return; }
+    users.push({ username, name, role, status:'离线', lastLogin:'--', password });
+    saveUsers(users);
+    renderUsers();
+    closeModal();
+    toast('用户 ' + name + ' 已添加', 'success');
+}
+
+function editUser(index) {
+    const users = getUsers();
+    const u = users[index];
+    openModal('编辑用户', `
+        <div class="form-group"><label class="form-label">用户名</label><input type="text" class="form-input" value="${u.username}" disabled style="opacity:.6"></div>
+        <div class="form-group"><label class="form-label">姓名</label><input type="text" class="form-input" id="editName" value="${u.name}"></div>
+        <div class="form-group"><label class="form-label">角色</label><select class="form-select" id="editRole">
+            <option value="超级管理员" ${u.role==='超级管理员'?'selected':''}>超级管理员</option>
+            <option value="管理员" ${u.role==='管理员'?'selected':''}>管理员</option>
+            <option value="操作员" ${u.role==='操作员'?'selected':''}>操作员</option>
+            <option value="值班员" ${u.role==='值班员'?'selected':''}>值班员</option>
+        </select></div>
+        <div class="form-group"><label class="form-label">新密码 (留空不修改)</label><input type="password" class="form-input" id="editPassword" placeholder="留空则不修改"></div>
+    `, `<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveUser(${index})">保存</button>`);
+}
+
+function saveUser(index) {
+    const users = getUsers();
+    users[index].name = document.getElementById('editName').value.trim();
+    users[index].role = document.getElementById('editRole').value;
+    const pw = document.getElementById('editPassword').value;
+    if (pw) users[index].password = pw;
+    saveUsers(users);
+    renderUsers();
+    closeModal();
+    toast('用户信息已更新', 'success');
+}
+
+function deleteUser(index) {
+    const users = getUsers();
+    const u = users[index];
+    openModal('确认删除', `<div style="text-align:center;padding:8px 0"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:13px;font-weight:600">确定删除用户 "${u.name}" 吗？</div></div>`,
+        `<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="confirmDeleteUser(${index})">确认删除</button>`);
+}
+
+function confirmDeleteUser(index) {
+    const users = getUsers();
+    users.splice(index, 1);
+    saveUsers(users);
+    renderUsers();
+    closeModal();
+    toast('用户已删除', 'success');
+}
+
+/* DATA */
+async function loadDataStats() {
+    try {
+        const res = await authFetch(API_BASE + '/api/stats');
+        if (res.ok) {
+            const data = await res.json();
+            setTxt('dataTotalDetections', (data.totalDetections || 0) + ' 条');
+            setTxt('dataTotalImages', (data.totalImages || 0) + ' 张');
+        }
+        const sysRes = await authFetch(API_BASE + '/api/system_info');
+        if (sysRes.ok) {
+            const s = await sysRes.json();
+            if (s.status === 'success') {
+                setTxt('dataStorageSize', s.dataDirSizeMb + ' MB');
+            }
+        }
+    } catch(e) {}
+}
+
+function exportAllData() {
+    toast('正在导出数据...', 'info');
+    // Trigger download via the dashboard's export
+    location.href = API_BASE + '/index';
+}
+
+function openDataFolder() {
+    authFetch(API_BASE + '/api/open_folder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({folder: 'data'})
+    }).then(res => {
+        if (res.ok) toast('已打开数据目录', 'success');
+        else toast('打开失败（可能在服务器环境）', 'error');
+    }).catch(() => toast('打开失败', 'error'));
+}
+
+function confirmClearData() {
+    openModal('确认清空', `<div style="text-align:center;padding:8px 0"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:13px;font-weight:600;margin-bottom:6px">确定要清空所有检测数据吗？</div><div style="font-size:11px;color:var(--text-muted)">此操作不可恢复</div></div>`,
+        `<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="clearAllData()">确认清空</button>`);
+}
+
+async function clearAllData() {
+    try {
+        const res = await authFetch(API_BASE + '/api/delete_all_images', {method:'DELETE'});
+        if (res.ok) { toast('数据已清空', 'success'); closeModal(); loadDataStats(); }
+        else toast('清空失败: ' + res.status, 'error');
+    } catch(e) { toast('清空失败', 'error'); }
+}
+
+/* DEVICES */
+function showAddDeviceModal() {
+    openModal('添加设备', `
+        <div class="form-group"><label class="form-label">设备名称</label><input type="text" class="form-input" id="devName" placeholder="如: 走廊摄像头"></div>
+        <div class="form-group"><label class="form-label">设备类型</label><select class="form-select" id="devType"><option value="USB">USB摄像头</option><option value="RTSP">RTSP网络摄像头</option><option value="FILE">视频文件</option></select></div>
+        <div class="form-group"><label class="form-label">设备地址</label><input type="text" class="form-input" id="devAddress" placeholder="设备索引(0) 或 RTSP地址"></div>
+        <div class="form-group"><label class="form-label">监控区域</label><input type="text" class="form-input" id="devArea" placeholder="如: A区走廊"></div>
+    `, `<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="toast('设备已添加（需重启Python服务生效）','success');closeModal()">添加</button>`);
+}
+
+function editDevice(index) {
+    toast('设备编辑功能 - 修改后需重启Python服务', 'info');
+}
+
+/* MODEL INFO */
+async function fetchModelStatus() {
+    try {
+        const [modelRes, aiRes] = await Promise.allSettled([
+            authFetch(API_BASE + '/api/model_info'),
+            authFetch(API_BASE + '/api/ai/status')
+        ]);
+        if (modelRes.status === 'fulfilled' && modelRes.value.ok) {
+            const m = await modelRes.value.json();
+            setTxt('modelDeviceSetting', m.device || 'N/A');
+            setTxt('modelPrecisionSetting', m.precision || 'N/A');
+        }
+        if (aiRes.status === 'fulfilled' && aiRes.value.ok) {
+            const a = await aiRes.value.json();
+            setTxt('qwenStatus', a.status === 'online' ? '已连接' : '未启动');
+        }
+    } catch(e) {}
+}
+
+/* INIT */
+loadSettings();
+renderUsers();
+loadDataStats();
+fetchModelStatus();
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>

@@ -110,6 +110,34 @@ public class DetectionService {
         return new DirScan(detections, images, totalCount);
     }
 
+    /**
+     * Lightweight summary: counts only, no detection list. For frequent polling.
+     */
+    public Map<String, Object> getStatsSummary() {
+        try {
+            DirScan scan = getOrScanUploadDir();
+            List<DetectionData> allDetections = scan.detections();
+            StatsResponse.BehaviorCounts bc = calculateBehaviorCounts(allDetections);
+
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("totalDetections", scan.totalDetectionCount());
+            summary.put("totalImages", scan.imageFiles().size());
+
+            Map<String, Integer> counts = new LinkedHashMap<>();
+            counts.put("跌倒", bc.getFall());
+            counts.put("打架", bc.getFight());
+            counts.put("离岗", bc.getAbsent());
+            counts.put("疲劳", bc.getFatigue());
+            counts.put("人员聚集", bc.getGather());
+            summary.put("behaviorCounts", counts);
+
+            return summary;
+        } catch (Exception e) {
+            log.error("Error getting stats summary", e);
+            return Map.of("totalDetections", 0, "totalImages", 0, "behaviorCounts", Map.of());
+        }
+    }
+
     public StatsResponse getStats() {
         try {
             DirScan scan = getOrScanUploadDir();

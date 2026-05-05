@@ -1,0 +1,10 @@
+{
+  "cameras": [
+    {
+      "id": "cam0",
+      "type": "usb",
+      "address": 0,
+      "name": "主摄像头"
+    }
+  ]
+}
