@@ -1,0 +1,24 @@
+{
+  "cameras": [
+    {
+      "id": "cam-10",
+      "type": "rtsp",
+      "address": "rtsp://admin:YOUR_PASSWORD_HERE@192.168.1.10:554/cam/realmonitor?channel=1&subtype=0",
+      "name": "大华-192.168.1.10",
+      "httpMjpegUrl": "http://admin:YOUR_PASSWORD_HERE@192.168.1.10/cgi-bin/mjpg/video.cgi?channel=1&subtype=1"
+    },
+    {
+      "id": "cam-11",
+      "type": "rtsp",
+      "address": "rtsp://admin:YOUR_PASSWORD_HERE@192.168.1.11:554/cam/realmonitor?channel=1&subtype=0",
+      "name": "海康-192.168.1.11",
+      "httpMjpegUrl": "http://admin:YOUR_PASSWORD_HERE@192.168.1.11/Streaming/channels/1/httppreview"
+    },
+    {
+      "id": "cam-12",
+      "type": "usb",
+      "address": 0,
+      "name": "USB摄像头"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "cameras": [
+    { "id": "0", "type": "usb", "address": 0, "name": "USB摄像头" },
+    { "id": "hik-01", "type": "rtsp", "address": "rtsp://admin:CHANGE_ME@192.168.1.64:554/Streaming/Channels/101", "name": "海康球机-A区" },
+    { "id": "dh-01", "type": "rtsp", "address": "rtsp://admin:CHANGE_ME@192.168.1.65:554/cam/realmonitor?channel=1&subtype=0", "name": "大华枪机-B区" }
+  ]
+}

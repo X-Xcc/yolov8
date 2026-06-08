@@ -1,9 +1,0 @@
-ultralytics
-opencv-python
-torch
-torchvision
-torchaudio
-numpy
-Pillow
-flask
-flask-cors

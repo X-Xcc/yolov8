@@ -1,0 +1,19 @@
+# YOLOv8 Pose 数据集配置
+# 数据目录结构:
+#   datasets/pose/
+#   ├── images/train/  images/val/
+#   └── labels/train/  labels/val/
+
+path: ../datasets/pose
+train: images/train
+val: images/val
+
+# COCO 17 关键点，每个关键点 (x, y, visibility)
+# visibility: 0=不存在, 1=被遮挡, 2=可见
+kpt_shape: [17, 3]
+
+# 水平翻转关键点映射
+flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
+
+names:
+  0: person

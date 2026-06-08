@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: ../server
+    container_name: yolov8-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - APP_API_KEY=${API_KEY:-change-me-in-production}
+    volumes:
+      - ../server/data:/app/data
+      - ../videos:/app/videos
+      - ../models:/app/models
+      - ../results:/app/results
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: yolov8-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ../web:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    restart: unless-stopped

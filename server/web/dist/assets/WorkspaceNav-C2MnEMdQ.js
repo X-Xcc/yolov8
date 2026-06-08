@@ -1,0 +1,6 @@
+import{c as r,j as e,P as c,L as s}from"./index-BCDhcU2k.js";/**
+ * @license lucide-react v0.474.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const o=[["circle",{cx:"18",cy:"18",r:"3",key:"1xkwt0"}],["circle",{cx:"6",cy:"6",r:"3",key:"1lh9wr"}],["path",{d:"M13 6h3a2 2 0 0 1 2 2v7",key:"1yeb86"}],["path",{d:"M11 18H8a2 2 0 0 1-2-2V9",key:"19pyzm"}]],l=r("GitCompare",o),m=[{label:"数据标注",href:"/annotation.html",icon:c},{label:"算法对比",href:"/training",icon:l}];function x(){return e.jsx("nav",{className:"sticky top-0 z-50 bg-white border-b border-outline-variant shadow-sm",children:e.jsxs("div",{className:"max-w-[1800px] mx-auto px-5 h-12 flex items-center gap-6",children:[e.jsx("span",{className:"font-bold text-body text-primary tracking-tight shrink-0",children:"长明灯"}),e.jsx("div",{className:"flex items-center gap-1",children:m.map(({label:a,href:t,icon:i})=>{const n=window.location.pathname.endsWith(t.replace(".html",""));return e.jsxs(s,{to:t,className:`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-caption font-semibold transition-colors ${n?"bg-primary/10 text-primary":"text-on-surface-variant hover:bg-surface-container-high"}`,children:[e.jsx(i,{size:14}),a]},t)})})]})})}export{x as W};

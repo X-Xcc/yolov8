@@ -26,7 +26,12 @@ openjdk/
 Thumbs.db
 
 # Data (auto-generated)
-backend/data/
+server/data/
+data/
+
+# Node
+node_modules/
+web/node_modules/
 
 # Videos (auto-generated)
 results/
@@ -40,3 +45,38 @@ models/*.pt
 
 # Environment
 .env
+.venv/
+venv/
+
+# Claude Code / gstack
+.claude/
+.gstack/
+.superpowers/
+
+# Maven wrapper
+.mvn/
+maven-wrapper/
+
+# GPU test scripts
+check_gpu.py
+download_torch_gpu.py
+install_gpu_torch.py
+test_gpu.py
+
+# Test snapshots
+test_snapshot*.jpg
+
+# Superpowers docs (local plans/specs)
+docs/superpowers/
+
+# Deploy packages & third-party binaries
+deploy-pkg/
+server/bin/
+
+# Agents
+.agents/
+skills-lock.json
+
+# Camera config (contains passwords)
+detection/cameras.json
+server/detection/cameras.json
