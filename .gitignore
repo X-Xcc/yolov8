@@ -39,6 +39,12 @@ videos/
 
 # Models (large, download separately)
 models/*.pt
+*.pt
+weights/
+
+# Training data and outputs (local)
+datasets/
+runs/
 
 # AI tools
 .ai/
@@ -47,6 +53,9 @@ models/*.pt
 .env
 .venv/
 venv/
+.train-venv/
+.codex-runtime/
+.obsidian/
 
 # Claude Code / gstack
 .claude/

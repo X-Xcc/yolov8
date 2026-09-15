@@ -32,6 +32,8 @@ public class AlertController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         try {
+            if (size > 100) size = 100;
+            if (size < 1) size = 20;
             ApiResponse.PageData<Alert> result = alertService.getAlertsPage(page, size, type, status, since);
             return ResponseEntity.ok(ApiResponse.success(result));
         } catch (Exception e) {

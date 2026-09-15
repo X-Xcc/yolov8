@@ -21,7 +21,9 @@ function playAlarmTone(ctx: AudioContext) {
 export function startAlarmSound() {
   try {
     stopAlarmSound();
-    alarmCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    alarmCtx = new AudioCtx();
     if (alarmCtx.state === "suspended") {
       alarmCtx.resume();
     }

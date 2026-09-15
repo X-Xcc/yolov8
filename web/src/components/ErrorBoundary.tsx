@@ -27,8 +27,12 @@ export default class AppErrorBoundary extends Component<Props, State> {
           <h2>渲染错误</h2>
           <pre style={{ color: "#ff6b6b", whiteSpace: "pre-wrap" }}>
             {this.state.error.message}
-            {"\n"}
-            {this.state.error.stack}
+            {import.meta.env.DEV && this.state.error.stack && (
+              <>
+                {"\n"}
+                {this.state.error.stack}
+              </>
+            )}
           </pre>
         </div>
       );

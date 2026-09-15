@@ -25,9 +25,18 @@ export async function loadSystemStatus(signal?: AbortSignal): Promise<SystemStat
   return new Promise<SystemStatus>((resolve, reject) => {
     let settled = false;
 
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        unsubscribe();
+        reject(new Error('SSE system_metrics timeout'));
+      }
+    }, 10000);
+
     const unsubscribe = subscribeToSystemStatus(status => {
       if (!settled) {
         settled = true;
+        clearTimeout(timeout);
         unsubscribe();
         resolve(status);
       }
@@ -36,6 +45,7 @@ export async function loadSystemStatus(signal?: AbortSignal): Promise<SystemStat
     signal?.addEventListener('abort', () => {
       if (!settled) {
         settled = true;
+        clearTimeout(timeout);
         unsubscribe();
         reject(new DOMException('Aborted', 'AbortError'));
       }

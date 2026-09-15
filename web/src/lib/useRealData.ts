@@ -3,7 +3,7 @@
  * 每个 hook: REST 初始加载 + SSE 实时更新
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect } from "react";
 import type {
   FpsStats,
   ModelInfo,
@@ -25,7 +25,7 @@ import {
   subscribeSystemStatus,
 } from "../services/realtime-data";
 
-export function useRealSystemStatus() {
+export function useRealSystemStatus(): SystemStatus {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     cpuUsage: 0,
     memoryUsage: 0,
@@ -51,7 +51,7 @@ export function useRealSystemStatus() {
 
   useEffect(() => subscribeSystemStatus(setSystemStatus), []);
 
-  return useMemo(() => systemStatus, [systemStatus]);
+  return systemStatus;
 }
 
 export function useRealModelInfo() {
@@ -102,7 +102,7 @@ export function useRealFpsStats() {
   return fpsStats;
 }
 
-export function useRealAuditLogs() {
+export function useRealAuditLogs(): AuditLog[] {
   const [logs, setLogs] = useState<AuditLog[]>([]);
 
   useEffect(() => {
@@ -113,11 +113,7 @@ export function useRealAuditLogs() {
 
   useEffect(() => subscribeAuditLogs(setLogs), []);
 
-  const setLogsUpdater = useCallback((_updater: AuditLog[] | ((prev: AuditLog[]) => AuditLog[])) => {
-    // noop — real data from SSE
-  }, []);
-
-  return [logs, setLogsUpdater] as const;
+  return logs;
 }
 
 export function useRealAuditTrend(range: "day" | "week" = "week") {

@@ -4,6 +4,7 @@ import json
 
 # 模块级常量（原 yolov8_security.py 顶部）
 WEB_SERVER_URL = os.environ.get("WEB_SERVER_URL", "http://127.0.0.1:5000")
+API_KEY = os.environ.get("API_KEY", "")
 SEND_FRAME_INTERVAL = 1      # 每N帧发送一次，1=每帧都发
 JPEG_QUALITY = 50            # JPEG压缩质量
 DRAW_OVERLAY = False          # 是否绘制检测框和UI叠加层
@@ -96,7 +97,8 @@ class Config:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Warning: 阈值配置加载失败 ({e})，使用默认值")
             return
 
         m = data.get("model", {})

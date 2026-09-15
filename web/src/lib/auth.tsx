@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from "react";
 import { getToken, clearToken } from "./api";
 
 interface AuthCtx {
@@ -31,8 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("rtk:token-invalid", handler);
   }, []);
 
+  const contextValue = useMemo(
+    () => ({ authenticated, login, logout }),
+    [authenticated, login, logout]
+  );
+
   return (
-    <AuthContext.Provider value={{ authenticated, login, logout }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

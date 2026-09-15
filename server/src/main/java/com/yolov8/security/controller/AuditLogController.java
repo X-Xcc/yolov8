@@ -33,6 +33,8 @@ public class AuditLogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         try {
+            if (size > 100) size = 100;
+            if (size < 1) size = 20;
             ApiResponse.PageData<AuditLog> result = auditLogService.getLogsPage(page, size, search, category, riskLevel);
             return ResponseEntity.ok(ApiResponse.success(result));
         } catch (Exception e) {

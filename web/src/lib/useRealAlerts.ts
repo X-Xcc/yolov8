@@ -29,7 +29,7 @@ export function useRealAlerts() {
 
   // SSE 实时追加新告警
   useEffect(() => {
-    return subscribeSse("alerts", (data: any) => {
+    return subscribeSse("alerts", (data: unknown) => {
       if (!Array.isArray(data)) return;
       setAlerts((prev) => {
         const incoming = new Map<string, Alert>();

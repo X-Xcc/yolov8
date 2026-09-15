@@ -24,11 +24,12 @@ public class QwenVLService {
     private static final Logger log = LoggerFactory.getLogger(QwenVLService.class);
     private final AppConfig appConfig;
     private final ObjectMapper objectMapper;
-    private final RestTemplate restTemplate = new RestTemplate();
-    
-    public QwenVLService(AppConfig appConfig, ObjectMapper objectMapper) {
+    private final RestTemplate restTemplate;
+
+    public QwenVLService(AppConfig appConfig, ObjectMapper objectMapper, RestTemplate restTemplate) {
         this.appConfig = appConfig;
         this.objectMapper = objectMapper;
+        this.restTemplate = restTemplate;
     }
 
     /**

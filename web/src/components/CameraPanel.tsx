@@ -1,5 +1,6 @@
 import React from "react";
 import { Users, VideoOff } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Camera, CameraStatus } from "../types";
 import { cn, sanitizeImageUrl } from "../lib/utils";
 
@@ -10,6 +11,8 @@ const CameraPanel = React.memo(function CameraPanel({
   camera: Camera;
   personCount: number;
 }) {
+  const navigate = useNavigate();
+
   return (
     <div className="relative group bg-black overflow-hidden flex flex-col border border-white/5">
       {/* Scanline Effect Overlay (CSS-only) */}
@@ -23,7 +26,7 @@ const CameraPanel = React.memo(function CameraPanel({
         />
       ) : (
         <div className="w-full h-full bg-zinc-900/50 flex flex-col items-center justify-center gap-sm cursor-pointer group"
-             onClick={() => window.location.href = '/devices'}>
+             onClick={() => navigate('/devices')}>
           <VideoOff size={32} className="text-white/10 group-hover:text-primary/50 transition-colors" />
           <span className="text-body-lg font-mono text-white/15">NO SIGNAL</span>
           <span className="text-body-sm text-primary/0 group-hover:text-primary/70 transition-all">点击接入摄像头</span>

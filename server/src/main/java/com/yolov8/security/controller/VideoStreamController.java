@@ -1,16 +1,17 @@
 package com.yolov8.security.controller;
 
-import com.yolov8.security.config.AppConfig;
 import com.yolov8.security.service.CameraConfigService;
-import com.yolov8.security.service.DemoService;
+import com.yolov8.security.service.FrameService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.awt.*;
@@ -19,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.imageio.ImageIO;
 
@@ -33,75 +35,37 @@ public class VideoStreamController {
     @Value("${app.video.no-frame-poll-interval-ms:200}")
     private int noFramePollIntervalMs;
 
-    @Value("${app.video.frame-ttl-ms:30000}")
-    private long frameTtlMs;
-
     private static final long TEST_FRAME_CACHE_MS = 5000L; // 5s cache, avoid flicker
 
     // Test frame cache per camera
     private final Map<String, BufferedImage> cachedTestFrames = new ConcurrentHashMap<>();
     private final Map<String, Long> cachedTestFrameAtMs = new ConcurrentHashMap<>();
 
-    // ConcurrentHashMap<camId, jpegBytes>，每个摄像头独立存储最新帧
-    /** Multi-camera frame storage: camId -> latest frame bytes (JPEG) */
-    private static final int MAX_FRAME_ENTRIES = 32;
-    private final Map<String, byte[]> latestFrameBytes = new ConcurrentHashMap<>();
-    private final Map<String, Long> lastFrameIds = new ConcurrentHashMap<>();
-
     /** Default camera ID */
     private static final String DEFAULT_CAM = "0";
 
-    private final AppConfig appConfig;
-    private final DemoService demoService;
     private final CameraConfigService cameraConfigService;
+    private final FrameService frameService;
 
-    public VideoStreamController(AppConfig appConfig, DemoService demoService, CameraConfigService cameraConfigService) {
-        this.appConfig = appConfig;
-        this.demoService = demoService;
+    public VideoStreamController(CameraConfigService cameraConfigService, FrameService frameService) {
         this.cameraConfigService = cameraConfigService;
+        this.frameService = frameService;
     }
 
     // Python POST进来，MJPEG读出去
     /**
      * Update frame bytes for a specific camera.
-     * The incoming Python payload is already JPEG, so keep it as-is to avoid extra decode/re-encode work.
+     * Delegates to FrameService for storage.
      */
     public void updateFrame(byte[] frameBytes, String camId) {
-        String id = (camId != null && !camId.isEmpty()) ? camId : DEFAULT_CAM;
-        if (frameBytes == null || frameBytes.length == 0) {
-            return;
-        }
-        // OOM 防护：限制最大条目数，移除最旧的条目
-        if (latestFrameBytes.size() >= MAX_FRAME_ENTRIES && !latestFrameBytes.containsKey(id)) {
-            String oldest = null;
-            long oldestTs = Long.MAX_VALUE;
-            for (Map.Entry<String, Long> e : lastFrameIds.entrySet()) {
-                if (e.getValue() < oldestTs) {
-                    oldestTs = e.getValue();
-                    oldest = e.getKey();
-                }
-            }
-            if (oldest != null) {
-                latestFrameBytes.remove(oldest);
-                lastFrameIds.remove(oldest);
-            }
-        }
-        latestFrameBytes.put(id, frameBytes);
-        lastFrameIds.put(id, System.currentTimeMillis());
+        frameService.updateFrame(frameBytes, camId);
     }
 
     /**
      * Update frame for a specific camera. Converts to JPEG bytes immediately.
      */
     public void updateFrame(BufferedImage frame, String camId) {
-        String id = (camId != null && !camId.isEmpty()) ? camId : DEFAULT_CAM;
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(frame, "jpg", baos);
-            updateFrame(baos.toByteArray(), id);
-        } catch (IOException e) {
-            log.error("Error encoding frame for cam={}", id, e);
-        }
+        frameService.updateFrame(frame, camId);
     }
 
     /**
@@ -149,82 +113,114 @@ public class VideoStreamController {
             return;
         }
 
+        // SSRF 防护：验证目标地址，拒绝非已配置摄像头的内网地址
+        try {
+            java.net.URL url = new java.net.URL(targetUrl);
+            java.net.InetAddress addr = java.net.InetAddress.getByName(url.getHost());
+            if (CameraConfigController.isPrivateOrReservedIp(addr)) {
+                // 内网 IP 仅允许已配置的摄像头地址（proxy 端点只通过 camId 查找，此处已是已配置地址）
+                // 但如果有人篡改了 cameras.json 配置，这里仍然暴露风险
+                // 额外校验：确认该 camId 确实对应这个 URL
+                boolean isConfiguredCamera = false;
+                for (var cam : cameraConfigService.getAllCameras()) {
+                    if (camId.equals(cam.getId()) && targetUrl.equals(cam.getHttpMjpegUrl())) {
+                        isConfiguredCamera = true;
+                        break;
+                    }
+                }
+                if (!isConfiguredCamera) {
+                    response.setStatus(403);
+                    log.warn("SSRF blocked: camId={} resolved to private IP but URL not in config", camId);
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("SSRF check failed for camId={}: {}", camId, e.getMessage());
+        }
+
         try {
             java.net.URL url = new java.net.URL(targetUrl);
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(0); // 无限读取
-            conn.setRequestProperty("Accept", "multipart/x-mixed-replace, image/jpeg, */*");
+            try {
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(30000); // 30s timeout, avoid infinite hang on dead cameras
+                conn.setRequestProperty("Accept", "multipart/x-mixed-replace, image/jpeg, */*");
 
-            // Basic auth
-            if (username != null && !username.isEmpty() && password != null && !password.isEmpty()) {
-                String auth = username + ":" + password;
-                conn.setRequestProperty("Authorization",
-                    "Basic " + java.util.Base64.getEncoder().encodeToString(auth.getBytes()));
-            }
-
-            int status = conn.getResponseCode();
-            if (status >= 200 && status < 400) {
-                response.setContentType(conn.getContentType() != null ? conn.getContentType() : "multipart/x-mixed-replace;boundary=frame");
-                response.setHeader("Cache-Control", "no-cache");
-                response.setHeader("Connection", "keep-alive");
-
-                try (java.io.InputStream in = conn.getInputStream();
-                     java.io.OutputStream out = response.getOutputStream()) {
-                    byte[] buf = new byte[8192];
-                    int n;
-                    while ((n = in.read(buf)) != -1) {
-                        out.write(buf, 0, n);
-                        out.flush();
-                    }
+                // Basic auth
+                if (username != null && !username.isEmpty() && password != null && !password.isEmpty()) {
+                    String auth = username + ":" + password;
+                    conn.setRequestProperty("Authorization",
+                        "Basic " + java.util.Base64.getEncoder().encodeToString(auth.getBytes()));
                 }
-            } else {
-                response.setStatus(502);
-                log.warn("摄像头代理返回 HTTP {}: {}", status, targetUrl);
+
+                int status = conn.getResponseCode();
+                if (status >= 200 && status < 400) {
+                    response.setContentType(conn.getContentType() != null ? conn.getContentType() : "multipart/x-mixed-replace;boundary=frame");
+                    response.setHeader("Cache-Control", "no-cache");
+                    response.setHeader("Connection", "keep-alive");
+
+                    try (java.io.InputStream in = conn.getInputStream();
+                         java.io.OutputStream out = response.getOutputStream()) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) != -1) {
+                            out.write(buf, 0, n);
+                            out.flush();
+                        }
+                    }
+                } else {
+                    response.setStatus(502);
+                    log.warn("摄像头代理返回 HTTP {}: {}", status, targetUrl);
+                }
+            } finally {
+                conn.disconnect();
             }
-            conn.disconnect();
         } catch (java.io.IOException e) {
             log.debug("摄像头代理断开: {} - {}", camId, e.getMessage());
         }
     }
 
-    // MJPEG流
     /**
      * MJPEG video feed endpoint. Supports ?cam=0, ?cam=1, etc.
+     * Returns a Callable so Spring runs the streaming loop on the async task executor,
+     * freeing the servlet thread for other requests.
      */
     @GetMapping(value = "/video_feed")
-    public void getVideoFeed(@RequestParam(required = false, defaultValue = DEFAULT_CAM) String cam,
-                             HttpServletResponse response) {
-        response.setContentType("multipart/x-mixed-replace;boundary=frame");
-        response.setHeader("Cache-Control", "no-cache");
-        response.setHeader("Connection", "keep-alive");
-        response.setHeader("Pragma", "no-cache");
-
-        try (OutputStream out = response.getOutputStream()) {
-            while (!Thread.currentThread().isInterrupted()) {
+    public Callable<ResponseEntity<StreamingResponseBody>> getVideoFeed(
+            @RequestParam(required = false, defaultValue = DEFAULT_CAM) String cam) {
+        return () -> {
+            StreamingResponseBody stream = outputStream -> {
                 try {
-                    byte[] frameBytes = getFrameBytes(cam);
-                    if (frameBytes != null && frameBytes.length > 0) {
-                        writeFrame(out, frameBytes);
-                        Thread.sleep(streamPollIntervalMs);
-                    } else {
-                        byte[] testFrame = getTestFrameBytes(cam);
-                        if (testFrame.length > 0) {
-                            writeFrame(out, testFrame);
+                    while (!Thread.currentThread().isInterrupted()) {
+                        try {
+                            byte[] frameBytes = getFrameBytes(cam);
+                            if (frameBytes != null && frameBytes.length > 0) {
+                                writeFrame(outputStream, frameBytes);
+                                Thread.sleep(streamPollIntervalMs);
+                            } else {
+                                byte[] testFrame = getTestFrameBytes(cam);
+                                if (testFrame.length > 0) {
+                                    writeFrame(outputStream, testFrame);
+                                }
+                                Thread.sleep(noFramePollIntervalMs);
+                            }
+                        } catch (IOException e) {
+                            log.debug("Client disconnected during frame write (cam={})", cam);
+                            break;
                         }
-                        Thread.sleep(noFramePollIntervalMs);
                     }
-                } catch (IOException e) {
-                    log.debug("Client disconnected during frame write (cam={})", cam);
-                    break;
+                } catch (InterruptedException e) {
+                    log.debug("Video feed interrupted (cam={})", cam);
+                    Thread.currentThread().interrupt();
                 }
-            }
-        } catch (IOException e) {
-            log.debug("Client disconnected (cam={})", cam);
-        } catch (InterruptedException e) {
-            log.debug("Video feed interrupted (cam={})", cam);
-            Thread.currentThread().interrupt();
-        }
+            };
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("multipart/x-mixed-replace;boundary=frame"))
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "keep-alive")
+                    .header("Pragma", "no-cache")
+                    .body(stream);
+        };
     }
 
     /**
@@ -234,7 +230,7 @@ public class VideoStreamController {
     @GetMapping(value = "/api/cameras", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> getCameras() {
         // Merge live frame cameras with configured cameras
-        java.util.Set<String> allCameraIds = new java.util.LinkedHashSet<>(latestFrameBytes.keySet());
+        java.util.Set<String> allCameraIds = new java.util.LinkedHashSet<>(frameService.getActiveCameraIds());
         try {
             cameraConfigService.getAllCameras().forEach(cam -> allCameraIds.add(cam.getId()));
         } catch (Exception e) {
@@ -247,51 +243,13 @@ public class VideoStreamController {
         return result;
     }
 
-    /** Camera stats for SSE broadcasting */
+    /** Camera stats for SSE broadcasting — delegates to FrameService */
     public Map<String, Object> getCameraStats() {
-        // Demo mode: return virtual camera stats
-        if (appConfig != null && appConfig.isDemoMode() && demoService != null) {
-            Map<String, Object> stats = new java.util.LinkedHashMap<>();
-            java.util.List<Map<String, Object>> camList = new java.util.ArrayList<>();
-            java.util.Random rand = new java.util.Random();
-            for (String[] def : DemoService.CAMERA_DEFS) {
-                Map<String, Object> info = new java.util.LinkedHashMap<>();
-                info.put("id", def[0]);
-                info.put("name", def[1]);
-                boolean online = rand.nextDouble() > 0.2;
-                info.put("online", online);
-                info.put("personCount", online ? rand.nextInt(5) + 1 : 0);
-                camList.add(info);
-            }
-            stats.put("cameras", camList);
-            stats.put("activeCount", DemoService.CAMERA_DEFS.length);
-            return stats;
-        }
-
-        Map<String, Object> stats = new java.util.LinkedHashMap<>();
-        long now = System.currentTimeMillis();
-        java.util.List<Map<String, Object>> camList = new java.util.ArrayList<>();
-        for (Map.Entry<String, byte[]> entry : latestFrameBytes.entrySet()) {
-            Map<String, Object> info = new java.util.LinkedHashMap<>();
-            info.put("id", entry.getKey());
-            Long ts = lastFrameIds.get(entry.getKey());
-            info.put("online", ts != null && (now - ts) < frameTtlMs);
-            camList.add(info);
-        }
-        stats.put("cameras", camList);
-        stats.put("activeCount", latestFrameBytes.size());
-        return stats;
+        return frameService.getCameraStats();
     }
 
     private byte[] getFrameBytes(String cam) {
-        // Check TTL — expire stale frames
-        Long ts = lastFrameIds.get(cam);
-        if (ts != null && System.currentTimeMillis() - ts > frameTtlMs) {
-            latestFrameBytes.remove(cam);
-            lastFrameIds.remove(cam);
-            return null;
-        }
-        return latestFrameBytes.get(cam);
+        return frameService.getFrameBytes(cam);
     }
 
     // 无真实帧时生成模拟帧（灰色+文字），用于前端占位显示

@@ -7,8 +7,13 @@ interface ParticleBackgroundProps {
   showLines?: boolean;
 }
 
+interface ParticlesWithCustomData extends THREE.Points {
+  _positions?: Float32Array;
+  _velocities?: Float32Array;
+}
+
 function ParticleBackground({ particleCount = 3000, showLines = false }: ParticleBackgroundProps) {
-  const pointsRef = useRef<THREE.Points>(null!);
+  const pointsRef = useRef<ParticlesWithCustomData>(null!);
   const linesRef = useRef<THREE.LineSegments>(null!);
   const mouseRef = useRef({ x: 0, y: 0 });
   const mouseWorldRef = useRef(new THREE.Vector3());
@@ -81,8 +86,8 @@ function ParticleBackground({ particleCount = 3000, showLines = false }: Particl
       velocities[i3 + 1] = (Math.random() - 0.5) * 0.008;
       velocities[i3 + 2] = (Math.random() - 0.5) * 0.008;
     }
-    (pointsRef.current as any)._positions = positions;
-    (pointsRef.current as any)._velocities = velocities;
+    pointsRef.current._positions = positions;
+    pointsRef.current._velocities = velocities;
     const geo = pointsRef.current.geometry;
     (geo.attributes.position.array as Float32Array).set(positions);
     geo.attributes.position.needsUpdate = true;
@@ -101,10 +106,10 @@ function ParticleBackground({ particleCount = 3000, showLines = false }: Particl
   }, []);
 
   useFrame((_, delta) => {
-    if (!pointsRef.current || !(pointsRef.current as any)._positions) return;
+    if (!pointsRef.current || !pointsRef.current._positions) return;
     timeRef.current += delta;
-    const positions = (pointsRef.current as any)._positions as Float32Array;
-    const velocities = (pointsRef.current as any)._velocities as Float32Array;
+    const positions = pointsRef.current._positions;
+    const velocities = pointsRef.current._velocities;
 
     rotRef.current.x += (targetRotRef.current.x - rotRef.current.x) * 0.01;
     rotRef.current.y += (targetRotRef.current.y - rotRef.current.y) * 0.01;

@@ -39,4 +39,10 @@ class AuthControllerTest {
         mockMvc.perform(get("/api/me"))
             .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void login_page_is_public() throws Exception {
+        mockMvc.perform(get("/login"))
+            .andExpect(status().isOk());
+    }
 }

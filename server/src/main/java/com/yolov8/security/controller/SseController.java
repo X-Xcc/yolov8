@@ -6,9 +6,12 @@ import com.yolov8.security.service.AlertService;
 import com.yolov8.security.service.AuditLogService;
 import com.yolov8.security.service.CameraConfigService;
 import com.yolov8.security.service.DetectionService;
+import com.yolov8.security.service.FrameService;
 import com.yolov8.security.service.KanbanEventBus;
 import com.yolov8.security.util.SystemMetricsCollector;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 @RestController
 public class SseController {
 
+    private static final Logger log = LoggerFactory.getLogger(SseController.class);
     private final Set<SseEmitter> emitters = ConcurrentHashMap.newKeySet();
     private final ObjectMapper objectMapper;
     private final ObjectMapper compactMapper;
@@ -34,13 +38,13 @@ public class SseController {
     private final AlertService alertService;
     private final AuditLogService auditLogService;
     private final DetectionService detectionService;
-    private final VideoStreamController videoStreamController;
+    private final FrameService frameService;
     private final AppConfig appConfig;
     private final ScheduledExecutorService scheduler;
 
     public SseController(ObjectMapper objectMapper, CameraConfigService cameraConfigService,
                          AlertService alertService, AuditLogService auditLogService,
-                         DetectionService detectionService, VideoStreamController videoStreamController,
+                         DetectionService detectionService, FrameService frameService,
                          AppConfig appConfig) {
         this.objectMapper = objectMapper;
         this.compactMapper = objectMapper.copy();
@@ -49,7 +53,7 @@ public class SseController {
         this.alertService = alertService;
         this.auditLogService = auditLogService;
         this.detectionService = detectionService;
-        this.videoStreamController = videoStreamController;
+        this.frameService = frameService;
         this.appConfig = appConfig;
 
         // Subscribe to event bus
@@ -65,8 +69,8 @@ public class SseController {
             try {
                 var metrics = collectSystemMetrics();
                 broadcast("system_metrics", metrics);
-                broadcast("camera_stats", videoStreamController.getCameraStats());
-            } catch (Exception ignored) {}
+                broadcast("camera_stats", frameService.getCameraStats());
+            } catch (Exception e) { log.debug("SSE metrics push failed", e); }
         }, 2, 2, TimeUnit.SECONDS);
     }
 
@@ -103,7 +107,7 @@ public class SseController {
         try {
             json = compactMapper.writeValueAsString(data);
         } catch (Exception e) {
-            System.err.println("SseController broadcast serialization error: " + e.getMessage());
+            log.debug("SSE broadcast serialization error", e);
             return;
         }
         for (SseEmitter emitter : emitters) {

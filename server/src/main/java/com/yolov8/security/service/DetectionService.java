@@ -40,6 +40,7 @@ public class DetectionService {
     private final AppConfig appConfig;
     private final ObjectMapper objectMapper;
     private final AlertService alertService;
+    // TODO: alertedImageFilenames grows unboundedly — replace with Caffeine cache (TTL-based eviction) if memory becomes a concern
     private final Set<String> alertedImageFilenames = ConcurrentHashMap.newKeySet();
 
     private volatile DirScan scanCache;
@@ -73,14 +74,24 @@ public class DetectionService {
     }
 
     private DirScan getOrScanUploadDir() throws IOException {
+        // Fast path: check volatile (no lock needed if cache is valid)
         long now = System.currentTimeMillis();
-        if (scanCache != null && (now - scanCacheTimeMs) < SCAN_CACHE_TTL_MS) {
-            return scanCache;
+        var cached = scanCache;
+        if (cached != null && (now - scanCacheTimeMs) < SCAN_CACHE_TTL_MS) {
+            return cached;
         }
-        DirScan fresh = scanUploadDirectory();
-        scanCache = fresh;
-        scanCacheTimeMs = now;
-        return fresh;
+        // Slow path: synchronize to avoid duplicate I/O
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            cached = scanCache;
+            if (cached != null && (now - scanCacheTimeMs) < SCAN_CACHE_TTL_MS) {
+                return cached;
+            }
+            DirScan fresh = scanUploadDirectory();
+            scanCache = fresh;
+            scanCacheTimeMs = now;
+            return fresh;
+        }
     }
 
     /**
@@ -468,47 +479,56 @@ public class DetectionService {
     }
 
     public SystemInfoDTO getSystemInfo() {
-        // Return cached result within TTL to avoid walking 278k files
+        // Fast path: check volatile (no lock needed if cache is valid)
         long now = System.currentTimeMillis();
-        if (systemInfoCache != null && (now - systemInfoCacheTimeMs) < SYSTEM_INFO_CACHE_TTL_MS) {
-            return systemInfoCache;
+        var cached = systemInfoCache;
+        if (cached != null && (now - systemInfoCacheTimeMs) < SYSTEM_INFO_CACHE_TTL_MS) {
+            return cached;
         }
-
-        SystemInfoDTO result;
-        try {
-            DirScan scan = getOrScanUploadDir();
-            int jsonCount = scan.totalDetectionCount();
-            int jpgCount = scan.imageFiles().size();
-
-            // Compute totalSize from filesystem (expensive, but cached for 60s)
-            long totalSize = 0;
-            File dataDir = new File(appConfig.getFile().getUploadDir());
-            if (dataDir.exists() && dataDir.isDirectory()) {
-                try (Stream<Path> walk = Files.walk(dataDir.toPath(), 2)) {
-                    totalSize = walk.filter(Files::isRegularFile)
-                            .mapToLong(p -> {
-                                try { return Files.size(p); }
-                                catch (IOException e) { return 0; }
-                            })
-                            .sum();
-                }
+        // Slow path: synchronize to avoid duplicate heavy computation
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            cached = systemInfoCache;
+            if (cached != null && (now - systemInfoCacheTimeMs) < SYSTEM_INFO_CACHE_TTL_MS) {
+                return cached;
             }
 
-            Runtime rt = Runtime.getRuntime();
-            long usedMemory = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
-            long maxMemory = rt.maxMemory() / (1024 * 1024);
+            SystemInfoDTO result;
+            try {
+                DirScan scan = getOrScanUploadDir();
+                int jsonCount = scan.totalDetectionCount();
+                int jpgCount = scan.imageFiles().size();
 
-            result = SystemInfoDTO.success(
-                    Math.round(totalSize / 1024.0 / 1024.0 * 100.0) / 100.0,
-                    jsonCount, jpgCount, usedMemory, maxMemory);
-        } catch (Exception e) {
-            log.error("Error getting system info", e);
-            result = SystemInfoDTO.error(e.getMessage());
+                // Compute totalSize from filesystem (expensive, but cached for 60s)
+                long totalSize = 0;
+                File dataDir = new File(appConfig.getFile().getUploadDir());
+                if (dataDir.exists() && dataDir.isDirectory()) {
+                    try (Stream<Path> walk = Files.walk(dataDir.toPath(), 2)) {
+                        totalSize = walk.filter(Files::isRegularFile)
+                                .mapToLong(p -> {
+                                    try { return Files.size(p); }
+                                    catch (IOException e) { return 0; }
+                                })
+                                .sum();
+                    }
+                }
+
+                Runtime rt = Runtime.getRuntime();
+                long usedMemory = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+                long maxMemory = rt.maxMemory() / (1024 * 1024);
+
+                result = SystemInfoDTO.success(
+                        Math.round(totalSize / 1024.0 / 1024.0 * 100.0) / 100.0,
+                        jsonCount, jpgCount, usedMemory, maxMemory);
+            } catch (Exception e) {
+                log.error("Error getting system info", e);
+                result = SystemInfoDTO.error(e.getMessage());
+            }
+
+            systemInfoCache = result;
+            systemInfoCacheTimeMs = now;
+            return result;
         }
-
-        systemInfoCache = result;
-        systemInfoCacheTimeMs = now;
-        return result;
     }
 
     public Map<String, Object> getCompareData() {

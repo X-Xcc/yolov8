@@ -67,21 +67,25 @@ public class AnnotationService {
     public List<AnnotationData> getAll() {
         lock.readLock().lock();
         try {
-            Path dir = getAnnotationsDir();
-            if (!Files.exists(dir)) return new ArrayList<>();
-            try (var stream = Files.list(dir)) {
-                return stream
-                    .filter(p -> p.toString().endsWith(".json"))
-                    .map(this::readAnnotation)
-                    .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(AnnotationData::getAnnotatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                    .collect(Collectors.toList());
-            }
+            return getAllInternal();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    private List<AnnotationData> getAllInternal() {
+        Path dir = getAnnotationsDir();
+        if (!Files.exists(dir)) return new ArrayList<>();
+        try (var stream = Files.list(dir)) {
+            return stream
+                .filter(p -> p.toString().endsWith(".json"))
+                .map(this::readAnnotation)
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(AnnotationData::getAnnotatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
         } catch (IOException e) {
             log.error("Failed to list annotations", e);
             return new ArrayList<>();
-        } finally {
-            lock.readLock().unlock();
         }
     }
 
@@ -152,7 +156,7 @@ public class AnnotationService {
     public Map<String, Object> getStats() {
         lock.readLock().lock();
         try {
-            List<AnnotationData> all = getAll();
+            List<AnnotationData> all = getAllInternal();
             int total = all.size();
             int unlabeled = 0, aiPending = 0, reviewed = 0;
             Map<String, Integer> labelCounts = new LinkedHashMap<>();
@@ -185,7 +189,7 @@ public class AnnotationService {
     public byte[] exportYolo() {
         lock.readLock().lock();
         try {
-            List<AnnotationData> all = getAll();
+            List<AnnotationData> all = getAllInternal();
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
             try (ZipOutputStream zos = new ZipOutputStream(baos)) {
                 for (AnnotationData ann : all) {

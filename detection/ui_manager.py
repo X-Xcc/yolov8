@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List
 
 import cv2
 import numpy as np
@@ -25,54 +25,6 @@ class UIManager:
         header = Utils.draw_text_cn(header, "LIVE", (img.shape[1] - 100, 15), 20, self.config.COLORS['text'])
         return np.vstack((header, img))
 
-    def draw_card(self, img: np.ndarray, title: str, content: List, pos: Tuple[int, int],
-                  width: int, height: int) -> np.ndarray:
-        """绘制卡片UI"""
-        x, y = pos
-        cv2.rectangle(img, (x, y), (x + width, y + height), self.config.COLORS['card_bg'], -1)
-        cv2.rectangle(img, (x, y), (x + width, y + height), self.config.COLORS['card_border'], 2)
-        img = Utils.draw_text_cn(img, title, (x + 10, y + 20), 18, self.config.COLORS['text'])
-        for i, line in enumerate(content):
-            if isinstance(line, tuple):
-                text, color = line
-                img = Utils.draw_text_cn(img, text, (x + 15, y + 50 + i * 30), 14, color)
-            else:
-                img = Utils.draw_text_cn(img, line, (x + 15, y + 50 + i * 30), 14, self.config.COLORS['text'])
-        return img
-
-    def draw_behavior_badge(self, img: np.ndarray, behavior: str, confidence: float, pos: Tuple[int, int]) -> Tuple[np.ndarray, int]:
-        """绘制行为标签"""
-        if behavior == "跌倒":
-            color = self.config.COLORS['danger']
-        elif behavior == "打架":
-            color = self.config.COLORS['warning']
-        elif behavior == "离岗":
-            color = self.config.COLORS['leave']
-        else:
-            color = self.config.COLORS['normal']
-
-        text = f"  {behavior} {confidence:.2f}  "
-        text_width, _ = Utils.measure_text_size(text, 16)
-        x, y = pos
-        rect_height = 30
-        cv2.rectangle(img, (x, y), (x + text_width + 10, y + rect_height), color, -1)
-        cv2.rectangle(img, (x, y), (x + text_width + 10, y + rect_height), (0, 0, 0), 1)
-        img = Utils.draw_text_cn(img, text, (x + 5, y + 5), 16, self.config.COLORS['bg'])
-        return img, text_width + 20
-
-    def draw_fps(self, img: np.ndarray, fps: float) -> np.ndarray:
-        """绘制FPS卡片"""
-        card_width = 120
-        card_height = 40
-        x = img.shape[1] - card_width - 10
-        y = 10
-        cv2.rectangle(img, (x, y), (x + card_width, y + card_height), self.config.COLORS['panel'], -1)
-        cv2.rectangle(img, (x, y), (x + card_width, y + card_height), self.config.COLORS['card_border'], 1)
-        fps_text = f"{fps:.1f} FPS"
-        cv2.putText(img, fps_text, (x + 10, y + 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, self.config.COLORS['text'], 2)
-        return img
-
     def draw_left_panel(self, img: np.ndarray, person_count: int, actions: List[str], logs: List[str], action_confidences: dict) -> np.ndarray:
         """绘制左侧状态面板"""
         panel_width = self.config.PANEL_WIDTH
@@ -86,24 +38,6 @@ class UIManager:
         cv2.rectangle(panel, (10, 180), (panel_width - 10, 330), self.config.COLORS['card_border'], 2)
         cv2.rectangle(panel, (10, 340), (panel_width - 10, 590), self.config.COLORS['card_bg'], -1)
         cv2.rectangle(panel, (10, 340), (panel_width - 10, 590), self.config.COLORS['card_border'], 2)
-
-        # 行为标签矩形
-        behavior_x = 20
-        behavior_y = 230
-        for action in actions:
-            confidence = action_confidences.get(action, 0.0)
-            color = self.config.COLORS.get('normal', (0, 255, 0))
-            if action == "跌倒": color = self.config.COLORS['danger']
-            elif action == "打架": color = self.config.COLORS['warning']
-            elif action == "离岗": color = self.config.COLORS['leave']
-            text = f"  {action} {confidence:.2f}  "
-            tw, _ = Utils.measure_text_size(text, 16)
-            cv2.rectangle(panel, (behavior_x, behavior_y), (behavior_x + tw + 10, behavior_y + 30), color, -1)
-            cv2.rectangle(panel, (behavior_x, behavior_y), (behavior_x + tw + 10, behavior_y + 30), (0, 0, 0), 1)
-            behavior_x += tw + 20
-            if behavior_x > panel_width - 120:
-                behavior_x = 20
-                behavior_y += 40
 
         # 批量文字渲染
         draw = Utils.begin_text_batch(panel)
@@ -138,13 +72,3 @@ class UIManager:
 
         panel = Utils.end_text_batch(panel)
         return np.hstack((panel, img))
-
-    def draw_exit_hint(self, img: np.ndarray) -> np.ndarray:
-        """绘制退出提示"""
-        return Utils.draw_text_cn(
-            img,
-            "按 Enter 退出系统",
-            (img.shape[1] - 250, img.shape[0] - 30),
-            20,
-            self.config.COLORS['text']
-        )

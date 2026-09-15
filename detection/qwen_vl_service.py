@@ -7,13 +7,15 @@ Qwen2.5-VL-7B 视觉语言模型服务
 
 import os
 import sys
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 修复 OpenMP 库冲突问题
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 
-# 直接设置模型路径为用户指定的路径
-os.environ['QWEN_VL_MODEL_PATH'] = 'D:\\AI_Project\\Models\\Qwen2.5-VL-7B-Instruct'
+# 模型路径由下方 MODEL_PATH 统一管理（环境变量 QWEN_VL_MODEL_PATH 优先）
 
 import json
 import base64
@@ -26,12 +28,13 @@ from flask_cors import CORS
 from PIL import Image
 import torch
 
-# 设置模型路径（请根据您的实际路径修改）
-# 使用用户指定的模型路径
-MODEL_PATH = os.environ.get("QWEN_VL_MODEL_PATH", "D:\\AI_Project\\Models\\blobs")
+# 模型路径：优先环境变量 QWEN_VL_MODEL_PATH，否则使用默认相对路径
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_MODEL_PATH = os.path.join(_SCRIPT_DIR, "..", "models", "Qwen2.5-VL-7B-Instruct")
+MODEL_PATH = os.environ.get("QWEN_VL_MODEL_PATH", _DEFAULT_MODEL_PATH)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000"])
 
 # 全局模型实例
 model = None
@@ -66,14 +69,16 @@ def load_model():
             print(f"检测到blobs目录，从父目录加载处理器配置: {processor_path}")
         
         # 加载处理器
-        # trust_remote_code: 仅用于官方 Qwen2.5-VL 模型的自定义代码，第三方模型慎用
+        # WARNING: trust_remote_code=True 允许执行模型仓库中的自定义代码
+        # 仅使用可信来源的模型，确保模型路径未被篡改
         processor = AutoProcessor.from_pretrained(processor_path, trust_remote_code=True)
         
         # 加载模型
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"使用设备: {device}")
         
-        # trust_remote_code: 仅用于官方 Qwen2.5-VL 模型的自定义代码，第三方模型慎用
+        # WARNING: trust_remote_code=True 允许执行模型仓库中的自定义代码
+        # 仅使用可信来源的模型，确保模型路径未被篡改
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             MODEL_PATH,
             torch_dtype=torch.float16 if device == "cuda" else torch.float32,
@@ -178,7 +183,8 @@ def analyze_image(image_data: bytes, prompt: str = "描述这张图片") -> str:
         return output_text.strip()
         
     except Exception as e:
-        return f"分析失败: {str(e)}"
+        logger.error("分析失败: %s", str(e))
+        return "图片分析失败，请稍后重试"
 
 
 @app.route('/health', methods=['GET'])
@@ -222,6 +228,8 @@ def analyze():
         
         # 解码图片
         image_base64 = data['image']
+        if len(image_base64) > 14_000_000:
+            return jsonify({"error": "图片数据过大，超过 10MB 限制"}), 413
         image_data = base64.b64decode(image_base64)
         
         # 获取提示词
@@ -237,9 +245,10 @@ def analyze():
         })
         
     except Exception as e:
+        logger.error("图片分析失败: %s", str(e))
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': '图片分析失败，请稍后重试'
         }), 500
 
 
@@ -282,9 +291,10 @@ def analyze_file():
         })
         
     except Exception as e:
+        logger.error("文件分析失败: %s", str(e))
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': '图片分析失败，请稍后重试'
         }), 500
 
 
@@ -328,10 +338,11 @@ def batch_analyze():
                     'result': result
                 })
             except Exception as e:
+                logger.error("批量分析第 %d 张图片失败: %s", i, str(e))
                 results.append({
                     'index': i,
                     'status': 'error',
-                    'message': str(e)
+                    'message': '图片分析失败'
                 })
         
         return jsonify({
@@ -342,9 +353,10 @@ def batch_analyze():
         })
         
     except Exception as e:
+        logger.error("批量分析失败: %s", str(e))
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': '图片分析失败，请稍后重试'
         }), 500
 
 

@@ -29,8 +29,8 @@ export default function Login({ onLogin }: LoginProps) {
     try {
       await apiLogin(username, password);
       onLogin();
-    } catch (err: any) {
-      setError(err.message || "登录失败");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message || "登录失败" : "登录失败");
     } finally {
       setLoading(false);
     }

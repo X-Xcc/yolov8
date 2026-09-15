@@ -7,16 +7,16 @@ import java.util.Map;
 @Service
 public class ModelInfoService {
 
-    private String status = "online";
-    private String precision = "FP16";
-    private String device = "GPU";
-    private double modelSizeMb = 4096;
-    private int totalLayers = 128;
-    private int convLayers = 64;
-    private int quantizedLayers = 32;
-    private boolean gpuAvailable = true;
-    private boolean halfPrecision = true;
-    private long lastUpdate = System.currentTimeMillis();
+    private volatile String status = "online";
+    private volatile String precision = "FP16";
+    private volatile String device = "GPU";
+    private volatile double modelSizeMb = 4096;
+    private volatile int totalLayers = 128;
+    private volatile int convLayers = 64;
+    private volatile int quantizedLayers = 32;
+    private volatile boolean gpuAvailable = true;
+    private volatile boolean halfPrecision = true;
+    private volatile long lastUpdate = System.currentTimeMillis();
     private static final long TIMEOUT = 300000; // 5分钟
 
     public void updateModelInfo(Map<String, Object> modelInfo) {

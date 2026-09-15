@@ -45,7 +45,7 @@ const RISK_OPTIONS = [
 
 export default function Audit() {
   const toast = useToast();
-  const [auditLogs] = useRealAuditLogs();
+  const auditLogs = useRealAuditLogs();
   const automationRate = useRealAutomationRate();
   const [trendRange, setTrendRange] = useState<AuditTrendRange>("week");
   const auditTrendRaw = useRealAuditTrend(trendRange);

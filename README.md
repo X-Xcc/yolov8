@@ -392,6 +392,17 @@ cd detection
 python yolov8_security.py
 ```
 
+### 接入 CICSIC 复核
+
+检测端保留独立摄像头读取和 YOLO 初筛，只在识别到 `人员聚集` 或 `异常聚集` 后，把检测摘要和一张截图推送到 CICSIC 后端。默认一键启动脚本已配置：
+
+```powershell
+set CICSIC_REVIEW_ENABLED=true
+set CICSIC_REVIEW_URL=http://127.0.0.1:8010/api/security-ai/yolo-reviews
+```
+
+单独运行检测端时也可以先设置这两个变量。CICSIC 后端收到结果后会调用国产视觉大模型复核，并把研判写入事件中心。
+
 ---
 
 ## 注意事项

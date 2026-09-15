@@ -1,5 +1,6 @@
 package com.yolov8.security.controller;
 
+import com.yolov8.security.config.AppConfig;
 import com.yolov8.security.model.ApiResponse;
 import com.yolov8.security.model.LoginRequest;
 import com.yolov8.security.model.LoginResponse;
@@ -21,26 +22,23 @@ public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
-    @Value("${app.admin.username:admin}")
-    private String adminUsername;
-
-    @Value("${app.admin.password:admin123}")
-    private String adminPassword;
-
     @Value("${app.jwt.secret}")
     private String jwtSecret;
 
     private final JwtService jwtService;
+    private final AppConfig appConfig;
 
-    public AuthController(JwtService jwtService) {
+    public AuthController(JwtService jwtService, AppConfig appConfig) {
         this.jwtService = jwtService;
+        this.appConfig = appConfig;
     }
 
     @PostConstruct
     public void init() {
-        if ("123".equals(adminPassword) || "admin123".equals(adminPassword)) {
+        String pwd = appConfig.getAdminPassword();
+        if ("123".equals(pwd) || "admin123".equals(pwd)) {
             log.warn("========== SECURITY WARNING ==========");
-            log.warn("Admin password is using a weak default value '{}'!", adminPassword);
+            log.warn("Admin password is using a weak default value!");
             log.warn("Set a strong password via: ADMIN_PASSWORD (env var)");
             log.warn("=======================================");
         }
@@ -59,10 +57,11 @@ public class AuthController {
             return ResponseEntity.badRequest().body(ApiResponse.error("用户名和密码不能为空"));
         }
 
-        if (constantTimeEquals(adminUsername, request.getUsername()) &&
-            constantTimeEquals(adminPassword, request.getPassword())) {
+        if (constantTimeEquals(appConfig.getAdminUsername(), request.getUsername()) &&
+            constantTimeEquals(appConfig.getAdminPassword(), request.getPassword())) {
 
-            if ("123".equals(adminPassword) || "admin123".equals(adminPassword)) {
+            String pwd = appConfig.getAdminPassword();
+            if ("123".equals(pwd) || "admin123".equals(pwd)) {
                 log.warn("SECURITY: Login succeeded with default admin password! Change ADMIN_PASSWORD env var immediately.");
             }
 

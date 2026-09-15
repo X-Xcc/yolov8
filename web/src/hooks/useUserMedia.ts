@@ -28,9 +28,10 @@ export function useUserMedia() {
         }
         setActive(true);
         setError(null);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!cancelled) {
-          setError(e.name === "NotAllowedError" ? "摄像头权限被拒绝" : "无法访问摄像头");
+          const msg = e instanceof Error && e.name === "NotAllowedError" ? "摄像头权限被拒绝" : "无法访问摄像头";
+          setError(msg);
         }
       }
     }

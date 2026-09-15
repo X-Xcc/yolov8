@@ -44,8 +44,8 @@ export default function Devices() {
       await action();
       toast.show(successMsg);
       onSuccess?.();
-    } catch (e: any) {
-      toast.show("操作失败: " + e.message, "error");
+    } catch (e: unknown) {
+      toast.show("操作失败: " + (e instanceof Error ? e.message : String(e)), "error");
     }
   };
 
@@ -157,8 +157,8 @@ export default function Devices() {
     try {
       const res = await validateDeviceConnection(form);
       toast.show(res.message, res.reachable ? "success" : "error");
-    } catch (e: any) {
-      toast.show("测试失败: " + e.message, "error");
+    } catch (e: unknown) {
+      toast.show("测试失败: " + (e instanceof Error ? e.message : String(e)), "error");
     } finally {
       setTestingConn(false);
     }
@@ -172,8 +172,8 @@ export default function Devices() {
       setShowDiscovery(true);
       setSelectedDevices(createSelectedDiscoverySet(result));
       toast.show(`发现 ${result.length} 个摄像头`, "success");
-    } catch (e: any) {
-      toast.show("扫描失败: " + e.message, "error");
+    } catch (e: unknown) {
+      toast.show("扫描失败: " + (e instanceof Error ? e.message : String(e)), "error");
     } finally {
       setScanning(false);
     }
@@ -190,8 +190,8 @@ export default function Devices() {
       setShowDiscovery(false);
       setDiscovered([]);
       await loadCameras();
-    } catch (e: any) {
-      toast.show("批量添加失败: " + e.message, "error");
+    } catch (e: unknown) {
+      toast.show("批量添加失败: " + (e instanceof Error ? e.message : String(e)), "error");
     }
   };
 
@@ -200,8 +200,8 @@ export default function Devices() {
       const saved = await saveDeviceSettings(settings);
       setSettings(saved);
       toast.show("设备设置已保存", "success");
-    } catch (e: any) {
-      toast.show("设置保存失败: " + e.message, "error");
+    } catch (e: unknown) {
+      toast.show("设置保存失败: " + (e instanceof Error ? e.message : String(e)), "error");
     }
   };
 

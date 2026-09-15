@@ -1,4 +1,5 @@
 import os
+import math
 import time
 import logging
 import threading
@@ -112,11 +113,9 @@ class Utils:
             return img
 
     @staticmethod
-    def calculate_distance(p1: np.ndarray, p2: np.ndarray) -> float:
-        """欧氏距离"""
-        dx = float(p1[0]) - float(p2[0])
-        dy = float(p1[1]) - float(p2[1])
-        return np.sqrt(dx * dx + dy * dy)
+    def calculate_distance(p1, p2) -> float:
+        """计算两点之间的距离（使用 math.hypot，比 numpy 更快用于标量）"""
+        return math.hypot(float(p1[0]) - float(p2[0]), float(p1[1]) - float(p2[1]))
 
     @staticmethod
     def calculate_angle(p1: np.ndarray, p2: np.ndarray, p3: np.ndarray) -> float:
@@ -175,10 +174,16 @@ class Utils:
         n = len(keypoints_list)
         clusters = []
         used = [False] * n
+
+        # Pre-compute all body centers (避免在嵌套循环中重复计算)
+        centers = []
+        for kp in keypoints_list:
+            centers.append(Utils.get_body_center(kp))
+
         for i in range(n):
             if used[i]:
                 continue
-            center_i = Utils.get_body_center(keypoints_list[i])
+            center_i = centers[i]
             if center_i is None:
                 continue
             cluster = [i]
@@ -186,7 +191,7 @@ class Utils:
             for j in range(i + 1, n):
                 if used[j]:
                     continue
-                center_j = Utils.get_body_center(keypoints_list[j])
+                center_j = centers[j]
                 if center_j is None:
                     continue
                 dist = Utils.calculate_distance(center_i, center_j) / max_dim

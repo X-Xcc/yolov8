@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -122,6 +123,20 @@ public class CameraConfigController {
             return ResponseEntity.ok(Map.of("reachable", false, "message", "地址不能为空"));
         }
 
+        // SSRF 防护：对 http_snapshot 类型检查目标地址是否为内网 IP
+        if ("http_snapshot".equals(type)) {
+            try {
+                URL url = new URL(address);
+                InetAddress addr = InetAddress.getByName(url.getHost());
+                if (isPrivateOrReservedIp(addr)) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("reachable", false, "message", "内网地址不允许测试连接"));
+                }
+            } catch (Exception e) {
+                // 解析失败，继续执行后续逻辑（会在连接时报错）
+            }
+        }
+
         Map<String, Object> result;
 
         switch (type) {
@@ -170,5 +185,17 @@ public class CameraConfigController {
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 检查给定 IP 地址是否为内网或保留地址（SSRF 防护）
+     * 匹配: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.0.0/16, ::1, link-local
+     */
+    public static boolean isPrivateOrReservedIp(InetAddress addr) {
+        return addr.isLoopbackAddress()
+                || addr.isSiteLocalAddress()
+                || addr.isAnyLocalAddress()
+                || addr.isLinkLocalAddress()
+                || addr.isMulticastAddress();
     }
 }

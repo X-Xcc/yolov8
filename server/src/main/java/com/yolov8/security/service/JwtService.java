@@ -49,6 +49,7 @@ public class JwtService {
 
     /** 签发 JWT */
     public String generateToken(String username) {
+        checkSecretConfigured();
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(username)
@@ -65,6 +66,7 @@ public class JwtService {
 
     /** 验证 JWT，返回 Claims；失败抛异常 */
     public Claims parseToken(String token) {
+        checkSecretConfigured();
         return Jwts.parser()
                 .verifyWith(jwtKey)
                 .build()
@@ -84,11 +86,18 @@ public class JwtService {
 
     /** 获取 subject (username) */
     public String getUsername(String token) {
+        checkSecretConfigured();
         return parseToken(token).getSubject();
     }
 
     /** JWT 是否已配置 */
     public boolean isConfigured() {
         return jwtKey != null;
+    }
+
+    private void checkSecretConfigured() {
+        if (jwtSecret == null || jwtSecret.isBlank() || jwtSecret.contains("change-this")) {
+            throw new IllegalStateException("JWT secret not configured");
+        }
     }
 }

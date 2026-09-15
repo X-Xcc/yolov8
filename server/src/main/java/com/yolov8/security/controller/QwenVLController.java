@@ -47,6 +47,11 @@ public class QwenVLController {
                 return ResponseEntity.badRequest().body(ApiResponse.error("缺少图片数据"));
             }
 
+            // 限制 base64 大小 (~10MB 原图，14MB base64)
+            if (base64Image.length() > 14_000_000) {
+                return ResponseEntity.status(413).body(ApiResponse.error("图片数据过大，最大支持 10MB"));
+            }
+
             String result = qwenVLService.analyzeImage(base64Image, prompt);
 
             Map<String, Object> response = new HashMap<>();
@@ -99,6 +104,19 @@ public class QwenVLController {
 
             if (images == null || images.isEmpty()) {
                 return ResponseEntity.badRequest().body(ApiResponse.error("缺少图片数据"));
+            }
+
+            // 限制批量数量
+            if (images.size() > 10) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("批量分析最多支持 10 张图片"));
+            }
+
+            // 限制每张图片大小
+            for (int i = 0; i < images.size(); i++) {
+                if (images.get(i) != null && images.get(i).length() > 14_000_000) {
+                    return ResponseEntity.status(413)
+                        .body(ApiResponse.error("第 " + (i + 1) + " 张图片数据过大，最大支持 10MB"));
+                }
             }
 
             List<Map<String, Object>> results = qwenVLService.batchAnalyzeImages(images, prompt);

@@ -118,7 +118,7 @@ def _load_cameras_config_fallback():
             cameras.append({
                 "id": cam.get("id", ""),
                 "type": cam.get("type", "usb"),
-                "address": cam.get("address", 0),
+                "address": address,
                 "name": cam.get("name", ""),
                 "go2rtc_id": cam.get("go2rtcId"),
             })

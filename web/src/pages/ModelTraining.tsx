@@ -148,9 +148,9 @@ export default function ModelTraining() {
         setUploadProgress(pct);
       });
       setUploadDone(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setUploadDone(false);
-      setUploadError(err?.message || "上传失败");
+      setUploadError(err instanceof Error ? err.message || "上传失败" : "上传失败");
     } finally {
       setUploading(false);
       setUploadProgress(0);

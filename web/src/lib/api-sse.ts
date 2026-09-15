@@ -7,6 +7,8 @@ const SSE_EVENT_TYPES = ['cameras', 'alerts', 'system_metrics', 'audit_logs', 'c
 const sseSubscribers = new Map<string, Set<SseCallback>>();
 let sseEventSource: EventSource | null = null;
 let sseReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelay = 1000;
+const MAX_RECONNECT_DELAY = 60000;
 
 function ensureSseConnection(): void {
   if (sseEventSource && sseEventSource.readyState !== EventSource.CLOSED) return;
@@ -40,11 +42,19 @@ function ensureSseConnection(): void {
     });
   }
 
+  eventSource.onopen = () => {
+    reconnectDelay = 1000;
+  };
+
   eventSource.onerror = () => {
     eventSource.close();
     sseEventSource = null;
     if (sseSubscribers.size > 0) {
-      sseReconnectTimer = setTimeout(ensureSseConnection, 5000);
+      const delay = reconnectDelay;
+      sseReconnectTimer = setTimeout(() => {
+        ensureSseConnection();
+      }, delay);
+      reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
     }
   };
 

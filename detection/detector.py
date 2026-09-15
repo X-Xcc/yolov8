@@ -256,8 +256,10 @@ class DetectionModule:
                     if fall_confirm_counts and best_pi < len(fall_confirm_counts):
                         new_fall_confirm_counts[best_ni] = fall_confirm_counts[best_pi]
 
-            # 逐人检测
-            for i, kp_np in enumerate(keypoints_list):
+            # 逐人检测（仅遍历当前帧内有效索引，避免 keypoints_list 累积导致越界）
+            n_track = min(len(keypoints_list), len(new_prev_bboxes_list), len(new_fall_confirm_counts))
+            for i in range(n_track):
+                kp_np = keypoints_list[i]
                 new_prev_bboxes_list[i] = current_bboxes[i] if i < len(current_bboxes) else None
                 is_fall, fall_confidence = self.detect_fall(kp_np)
                 if is_fall:

@@ -1,35 +1,39 @@
 import { Camera, DiscoveredCamera, Alert, AuditLog, CameraStatus, SystemStatus, SystemInfo, Settings, PageResponse, TrendData, RegionalStat, EvidenceStats, AlertFilterParams, AuditFilterParams, FpsStats, StatsSummary, ModelInfo, FullStatsResponse, AnnotationData, ImageItem } from "../types";
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete, apiDownload, subscribeSse, setToken, clearToken, API_BASE } from "../lib/api";
+import { getToken } from "../lib/auth-token";
 import { DEFAULT_DEVICE_SETTINGS } from "./devices-data";
 
 // --- Camera Config ---
 
 export async function fetchCameras(signal?: AbortSignal): Promise<Camera[]> {
-  const raw = await apiGet<any[]>("/api/camera_config", signal);
-  if (!Array.isArray(raw)) return [];
+  const raw = await apiGet<Record<string, unknown>[] | unknown>("/api/camera_config", signal);
+  const items: Record<string, unknown>[] = Array.isArray(raw) ? raw : [];
   // Merge with active camera IDs to determine online status
   let activeIds = new Set<string>();
   try {
     const active = await apiGet<{ cameras: string[] }>("/api/cameras", signal);
     activeIds = new Set(active.cameras || []);
   } catch {}
-  return raw.map((c: any) => ({
-    id: c.id || "",
-    name: c.name || "未命名",
-    type: c.type || "usb",
-    address: c.address ?? "",
-    user: c.user,
-    password: c.password,
-    brand: c.brand,
-    model: c.model,
-    go2rtcId: c.go2rtcId,
-    httpMjpegUrl: c.httpMjpegUrl,
-    ip: c.ip,
-    port: c.port,
-    status: activeIds.has(c.id || "") ? CameraStatus.ONLINE : CameraStatus.OFFLINE,
-    streamUrl: c.id ? `/video_feed?cam=${c.id}` : "",
-    personCount: 0,
-  }));
+  return items.map((c) => {
+    const rawType = c.type;
+    const camType: Camera["type"] = (rawType === "usb" || rawType === "rtsp" || rawType === "http_snapshot") ? rawType : "usb";
+    return {
+      id: String(c.id || ""),
+      name: String(c.name || "未命名"),
+      type: camType,
+      address: typeof c.address === "string" || typeof c.address === "number" ? c.address : "",
+      user: getString(c, "user"),
+      brand: getString(c, "brand"),
+      model: getString(c, "model"),
+      go2rtcId: getString(c, "go2rtcId"),
+      httpMjpegUrl: getString(c, "httpMjpegUrl"),
+      ip: getString(c, "ip"),
+      port: getNumber(c, "port"),
+      status: activeIds.has(String(c.id || "")) ? CameraStatus.ONLINE : CameraStatus.OFFLINE,
+      streamUrl: c.id ? `/video_feed?cam=${c.id}` : "",
+      personCount: 0,
+    };
+  });
 }
 
 // --- Auth ---
@@ -73,9 +77,9 @@ export function subscribeToCameras(callback: (cameras: Camera[]) => void): () =>
   refreshActive();
   const timer = setInterval(refreshActive, 5000);
 
-  const unsubCameras = subscribeSse("cameras", (data: any) => {
+  const unsubCameras = subscribeSse("cameras", (data: unknown) => {
     if (!Array.isArray(data)) { callback([]); return; }
-    const cameras = data.map((raw: any) => transformCamera(raw, activeCamIds));
+    const cameras = data.map((raw: Record<string, unknown>) => transformCamera(raw, activeCamIds));
     callback(cameras);
   });
   const unsubStats = subscribeSse("camera_stats", () => refreshActive());
@@ -84,22 +88,28 @@ export function subscribeToCameras(callback: (cameras: Camera[]) => void): () =>
 }
 
 export function subscribeToAlerts(callback: (alerts: Alert[]) => void): () => void {
-  return subscribeSse("alerts", (data: any) => callback(Array.isArray(data) ? data : []));
+  return subscribeSse("alerts", (data: unknown) => {
+    if (!Array.isArray(data)) { callback([]); return; }
+    callback(data.filter(isAlert));
+  });
 }
 
 export function subscribeToSystemStatus(callback: (status: SystemStatus) => void): () => void {
-  return subscribeSse("system_metrics", (data: any) => callback(transformSystemMetrics(data)));
+  return subscribeSse("system_metrics", (data: unknown) => callback(transformSystemMetrics(data)));
 }
 
 export function subscribeToAuditLogs(callback: (logs: AuditLog[]) => void): () => void {
-  return subscribeSse("audit_logs", (data: any) => callback(Array.isArray(data) ? data : []));
+  return subscribeSse("audit_logs", (data: unknown) => {
+    if (!Array.isArray(data)) { callback([]); return; }
+    callback(data.filter(isAuditLog));
+  });
 }
 
 // --- Camera Stats ---
 
 export function subscribeToCameraStats(callback: (stats: Record<string, number>) => void): () => void {
-  return subscribeSse("camera_stats", (data: any) => {
-    if (data?.cameras) {
+  return subscribeSse("camera_stats", (data: unknown) => {
+    if (isCameraStatsPayload(data)) {
       const map: Record<string, number> = {};
       for (const c of data.cameras) {
         map[c.camId] = c.personCount ?? 0;
@@ -138,11 +148,13 @@ export async function updateAlertStatus(alertId: string, status: "confirmed" | "
   await apiPatch(`/api/alerts/${alertId}`, { status });
 }
 
-export async function addCamera(camera: any) {
+export type CameraInput = Omit<Camera, "status" | "streamUrl" | "personCount">;
+
+export async function addCamera(camera: CameraInput) {
   await apiPost("/api/camera_config", camera);
 }
 
-export async function updateCamera(cameraId: string, camera: any) {
+export async function updateCamera(cameraId: string, camera: Partial<CameraInput>) {
   await apiPut(`/api/camera_config/${cameraId}`, camera);
 }
 
@@ -314,53 +326,102 @@ export function exportCsv(): void {
   apiDownload("/api/export/csv");
 }
 
+// --- Type guards ---
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function isAlert(v: unknown): v is Alert {
+  return isRecord(v) && typeof v.id === "string" && typeof v.type === "string";
+}
+
+function isAuditLog(v: unknown): v is AuditLog {
+  return isRecord(v) && typeof v.id === "string" && typeof v.timestamp === "string";
+}
+
+interface CameraStatsEntry {
+  camId: string;
+  personCount: number;
+}
+
+interface CameraStatsPayload {
+  cameras: CameraStatsEntry[];
+}
+
+function isCameraStatsPayload(v: unknown): v is CameraStatsPayload {
+  return isRecord(v) && Array.isArray(v.cameras);
+}
+
 // --- Transformers ---
 
-function transformCamera(raw: any, activeCamIds?: Set<string>): Camera {
-  const isActive = activeCamIds ? activeCamIds.has(raw.id || "") : false;
+function getString(obj: Record<string, unknown>, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+function getNumber(obj: Record<string, unknown>, key: string): number | undefined {
+  const v = obj[key];
+  return typeof v === "number" ? v : undefined;
+}
+
+function transformCamera(raw: Record<string, unknown>, activeCamIds?: Set<string>): Camera {
+  const isActive = activeCamIds ? activeCamIds.has(String(raw.id || "")) : false;
+  const rawType = raw.type;
+  const camType: Camera["type"] = (rawType === "usb" || rawType === "rtsp" || rawType === "http_snapshot") ? rawType : "usb";
   return {
-    id: raw.id || "",
-    name: raw.name || "未命名",
-    type: raw.type || "usb",
-    address: raw.address ?? "",
-    user: raw.user,
-    password: raw.password,
-    brand: raw.brand,
-    model: raw.model,
-    go2rtcId: raw.go2rtcId,
-    ip: raw.ip,
-    port: raw.port,
-    status: isActive ? CameraStatus.ONLINE : (raw.status ?? CameraStatus.OFFLINE),
+    id: String(raw.id || ""),
+    name: String(raw.name || "未命名"),
+    type: camType,
+    address: typeof raw.address === "string" || typeof raw.address === "number" ? raw.address : "",
+    user: getString(raw, "user"),
+    brand: getString(raw, "brand"),
+    model: getString(raw, "model"),
+    go2rtcId: getString(raw, "go2rtcId"),
+    ip: getString(raw, "ip"),
+    port: getNumber(raw, "port"),
+    status: isActive ? CameraStatus.ONLINE : (raw.status === CameraStatus.ONLINE || raw.status === CameraStatus.SIGNAL_LOST ? raw.status : CameraStatus.OFFLINE),
     streamUrl: raw.id ? `/video_feed?cam=${raw.id}` : "",
-    personCount: raw.personCount ?? 0,
+    personCount: typeof raw.personCount === "number" ? raw.personCount : 0,
   };
 }
 
-function transformSystemMetrics(raw: any): SystemStatus {
+function transformSystemMetrics(raw: unknown): SystemStatus {
   // Handle double-encoded JSON from SSE
   if (typeof raw === "string") {
     try { raw = JSON.parse(raw); } catch { raw = {}; }
   }
+  const obj = isRecord(raw) ? raw : {};
+  const rawServices = obj.services;
+  const serviceArray = Array.isArray(rawServices) ? rawServices : [];
   return {
-    cpuUsage: raw.cpuPercent ?? 0,
-    memoryUsage: raw.memoryPercent ?? 0,
-    storageUsage: raw.diskPercent ?? 0,
-    gpuUsage: raw.gpuPercent ?? 0,
-    version: raw.version ?? "unknown",
+    cpuUsage: typeof obj.cpuPercent === "number" ? obj.cpuPercent : 0,
+    memoryUsage: typeof obj.memoryPercent === "number" ? obj.memoryPercent : 0,
+    storageUsage: typeof obj.diskPercent === "number" ? obj.diskPercent : 0,
+    gpuUsage: typeof obj.gpuPercent === "number" ? obj.gpuPercent : 0,
+    version: typeof obj.version === "string" ? obj.version : "unknown",
     lastUpdate: new Date().toLocaleString(),
-    engine: raw.engine,
-    onlineDevices: raw.onlineDevices,
-    totalDevices: raw.totalDevices,
-    activeModels: raw.activeModels,
-    totalModels: raw.totalModels,
-    dataDirSizeMb: raw.dataDirSizeMb,
-    detectionCount: raw.detectionCount,
-    services: (raw.services ?? []).map((s: any) => ({
-      name: s.name ?? s.serviceName ?? "Unknown",
-      uptime: s.uptime ?? "-",
-      status: s.status ?? "unknown",
-      health: s.health ?? (s.status === "Running" ? "healthy" : "warning"),
-    })),
+    engine: typeof obj.engine === "string" ? obj.engine : undefined,
+    onlineDevices: typeof obj.onlineDevices === "number" ? obj.onlineDevices : undefined,
+    totalDevices: typeof obj.totalDevices === "number" ? obj.totalDevices : undefined,
+    activeModels: typeof obj.activeModels === "number" ? obj.activeModels : undefined,
+    totalModels: typeof obj.totalModels === "number" ? obj.totalModels : undefined,
+    dataDirSizeMb: typeof obj.dataDirSizeMb === "number" ? obj.dataDirSizeMb : undefined,
+    detectionCount: typeof obj.detectionCount === "number" ? obj.detectionCount : undefined,
+    services: serviceArray.map((s) => transformService(s)),
+  };
+}
+
+function transformService(s: unknown): SystemStatus["services"][number] {
+  const obj = isRecord(s) ? s : {};
+  const status = typeof obj.status === "string" ? obj.status : "unknown";
+  return {
+    name: typeof obj.name === "string" ? obj.name : (typeof obj.serviceName === "string" ? obj.serviceName : "Unknown"),
+    uptime: typeof obj.uptime === "string" ? obj.uptime : "-",
+    status,
+    health: (obj.health === "healthy" || obj.health === "warning" || obj.health === "error")
+      ? obj.health
+      : (status === "Running" ? "healthy" : "warning"),
   };
 }
 
@@ -373,8 +434,8 @@ export async function fetchAnnotationImages(signal?: AbortSignal): Promise<Image
 export async function fetchAnnotation(imageFilename: string, signal?: AbortSignal): Promise<AnnotationData | null> {
   try {
     return await apiGet(`/api/annotations/${encodeURIComponent(imageFilename)}`, signal);
-  } catch (e: any) {
-    if (e.message?.includes("标注不存在")) return null;
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message?.includes("标注不存在")) return null;
     throw e;
   }
 }
@@ -392,7 +453,7 @@ export function exportAnnotation(format: "yolo" | "coco" = "yolo"): void {
 }
 
 export async function uploadAnnotationImage(file: File): Promise<{ filename: string }> {
-  const token = localStorage.getItem("jwt_token");
+  const token = getToken();
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/annotations/upload`, {
@@ -411,16 +472,18 @@ export async function uploadAnnotationImage(file: File): Promise<{ filename: str
 // --- ONVIF 自动发现 ---
 
 export async function discoverCameras(): Promise<DiscoveredCamera[]> {
-  const result = await apiPost<any>("/api/discover", undefined);
+  const result = await apiPost<unknown>("/api/discover", undefined);
   if (Array.isArray(result)) return result;
-  if (Array.isArray(result?.data)) return result.data;
-  if (Array.isArray(result?.items)) return result.items;
-  if (Array.isArray(result?.cameras)) return result.cameras;
+  if (isRecord(result)) {
+    if (Array.isArray(result.data)) return result.data;
+    if (Array.isArray(result.items)) return result.items;
+    if (Array.isArray(result.cameras)) return result.cameras;
+  }
   return [];
 }
 
 export async function batchAddCameras(cameras: Partial<Camera>[]): Promise<{ added: number; errors: string[] }> {
-  const result = await apiPost<any>("/api/camera_config/batch", cameras);
+  const result = await apiPost<{ added: number; errors: string[] } | null>("/api/camera_config/batch", cameras);
   return result ?? { added: 0, errors: [] };
 }
 

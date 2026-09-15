@@ -11,6 +11,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -24,6 +25,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     );
 
     private final ConcurrentHashMap<String, RateBucket> buckets = new ConcurrentHashMap<>();
+    private final AtomicInteger requestCount = new AtomicInteger(0);
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -43,6 +45,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long now = System.currentTimeMillis();
 
         RateBucket b = buckets.computeIfAbsent(ip, k -> new RateBucket(now));
+        b.lastAccess = now;
+
+        // Probabilistic cleanup: every 100 requests, evict buckets idle > 5 min
+        if (requestCount.incrementAndGet() % 100 == 0) {
+            long cutoff = System.currentTimeMillis() - 300_000;
+            buckets.entrySet().removeIf(e -> e.getValue().lastAccess < cutoff);
+        }
 
         synchronized (b) {
             if (now - b.startMs > WINDOW_MS) {
@@ -63,6 +72,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static class RateBucket {
         long startMs;
         int count;
-        RateBucket(long startMs) { this.startMs = startMs; }
+        volatile long lastAccess;
+        RateBucket(long startMs) {
+            this.startMs = startMs;
+            this.lastAccess = startMs;
+        }
     }
 }

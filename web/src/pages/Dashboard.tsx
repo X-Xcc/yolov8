@@ -73,14 +73,19 @@ const TYPE_STYLE: Record<string, typeof C.fight> = {
   [AlertType.CROWD]: C.crowd,
 };
 
-function ChartTooltip({ active, payload, label }: any) {
+interface TooltipPayloadEntry {
+  name: string;
+  value: number;
+}
+
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) {
   if (!active || !payload?.length) return null;
-  const total = payload.reduce((s: number, p: any) => s + (p.value ?? 0), 0);
+  const total = payload.reduce((s: number, p: TooltipPayloadEntry) => s + (p.value ?? 0), 0);
   return (
     <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-outline-variant px-4 py-3 min-w-[140px]">
       <p className="text-xs font-semibold text-outline mb-2">{label}</p>
       <div className="space-y-1.5">
-        {payload.map((p: any) => (
+        {payload.map((p: TooltipPayloadEntry) => (
           <div key={p.name} className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: TREND_COLORS[p.name] }}/>

@@ -16,7 +16,6 @@ export interface Camera {
   type: "usb" | "rtsp" | "http_snapshot";
   address: string | number;
   user?: string;
-  password?: string;
   brand?: string;
   model?: string;
   go2rtcId?: string;

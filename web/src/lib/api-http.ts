@@ -18,9 +18,12 @@ function createJsonHeaders(headers?: HeadersInit): Record<string, string> {
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...createJsonHeaders(options.headers),
   };
+
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -40,17 +43,18 @@ function unwrapResponse<T>(json: unknown): T {
   return json as T;
 }
 
-function handleResponseError(response: Response, body: any): never {
+function handleResponseError(response: Response, body: unknown): never {
+  const err = (body ?? {}) as { error?: string; message?: string };
   if (response.status === 401) {
     clearToken();
     clearRequestState();
     window.dispatchEvent(new Event('rtk:token-invalid'));
   }
 
-  throw new Error(body.error || body.message || '请求失败');
+  throw new Error(err.error || err.message || '请求失败');
 }
 
-async function readJsonOrError(response: Response): Promise<any> {
+async function readJsonOrError(response: Response): Promise<unknown> {
   return response.json().catch(() => ({ error: response.statusText }));
 }
 
@@ -67,17 +71,17 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return cachedFetch(path, () => requestJson<T>(path, { signal }));
 }
 
-export async function apiPost<T>(path: string, body: any, signal?: AbortSignal): Promise<T> {
+export async function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   invalidateCache(path);
   return requestJson<T>(path, { method: 'POST', body: JSON.stringify(body), signal });
 }
 
-export async function apiPatch<T>(path: string, body: any, signal?: AbortSignal): Promise<T> {
+export async function apiPatch<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   invalidateCache(path);
   return requestJson<T>(path, { method: 'PATCH', body: JSON.stringify(body), signal });
 }
 
-export async function apiPut<T>(path: string, body: any, signal?: AbortSignal): Promise<T> {
+export async function apiPut<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   invalidateCache(path);
   return requestJson<T>(path, { method: 'PUT', body: JSON.stringify(body), signal });
 }
@@ -89,6 +93,7 @@ export async function apiDelete<T>(path: string, signal?: AbortSignal): Promise<
 
 export async function apiUpload<T>(path: string, file: File, onProgress?: (pct: number) => void): Promise<T> {
   const token = getToken();
+  invalidateCache(path);
 
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();

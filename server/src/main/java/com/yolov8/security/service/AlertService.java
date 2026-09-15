@@ -8,6 +8,8 @@ import com.yolov8.security.util.JsonFileUtils;
 import com.yolov8.security.model.Alert;
 import com.yolov8.security.model.ApiResponse;
 import com.yolov8.security.model.DetectionData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +28,7 @@ import java.util.stream.Stream;
 @Service
 public class AlertService {
 
+    private static final Logger log = LoggerFactory.getLogger(AlertService.class);
     private static final TypeReference<List<Alert>> TYPE_REF = new TypeReference<>() {};
     private static final DateTimeFormatter DET_TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -176,7 +179,7 @@ public class AlertService {
                         alert.setSnapshotUrl("/api/images/" + bestImg);
                         needsWrite = true;
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception e) { log.debug("Failed to resolve snapshot URL for alert", e); }
             }
 
             if (needsWrite) {
@@ -204,9 +207,9 @@ public class AlertService {
                                 .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
                         refs.add(new DetectionRef(det.getCameraId(), epochMs, det.getImageFilename()));
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception e) { log.debug("Failed to parse detection ref: {}", p.getFileName(), e); }
             });
-        } catch (IOException ignored) {}
+        } catch (IOException e) { log.debug("Failed to list detection files in {}", dataDir, e); }
 
         return refs;
     }

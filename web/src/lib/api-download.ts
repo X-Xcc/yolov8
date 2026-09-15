@@ -7,7 +7,15 @@ export function apiDownload(path: string, signal?: AbortSignal): void {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   fetch(getWorkspaceApiUrl(path), { headers, signal })
-    .then(res => res.blob())
+    .then(res => {
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = '/login';
+        }
+        throw new Error(`下载失败: HTTP ${res.status}`);
+      }
+      return res.blob();
+    })
     .then(blob => {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');

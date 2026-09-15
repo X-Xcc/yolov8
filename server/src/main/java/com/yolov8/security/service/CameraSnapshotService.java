@@ -1,6 +1,5 @@
 package com.yolov8.security.service;
 
-import com.yolov8.security.controller.VideoStreamController;
 import com.yolov8.security.repository.CameraRepository;
 import com.yolov8.security.service.CameraConfigService.Camera;
 import jakarta.annotation.PostConstruct;
@@ -29,12 +28,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * HTTP 快照轮询服务。
  *
  * 从配置的网络摄像头地址（如 http://10.23.82.101/）定时抓取 JPEG 快照，
- * 转换为 BufferedImage 后交给 VideoStreamController 缓存，
+ * 转换为 BufferedImage 后交给 FrameService 缓存，
  * 前端 /video_feed?cam=cam-10.23.82.101 即可实时获取该摄像头的 MJPEG 流。
  *
  * 架构流程：
- *   摄像头 HTTP → CameraSnapshotService (轮询) → VideoStreamController (帧缓存)
- *                                                                      ↓
+ *   摄像头 HTTP → CameraSnapshotService (轮询) → FrameService (帧缓存)
+ *                                                          ↓
  *   前端 /video_feed?cam=cam-10.23.82.101 ←── MJPEG 输出
  *
  * 使用 java.net.http.HttpClient（Java 17 内置），无需额外依赖。
@@ -67,15 +66,15 @@ public class CameraSnapshotService {
 
     static final String CAMERA_ID = "cam-10.23.82.101";
 
-    private final VideoStreamController videoStreamController;
+    private final FrameService frameService;
     private final CameraRepository cameraRepository;
     private HttpClient httpClient;
     private ScheduledExecutorService scheduler;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public CameraSnapshotService(VideoStreamController videoStreamController,
+    public CameraSnapshotService(FrameService frameService,
                                  CameraRepository cameraRepository) {
-        this.videoStreamController = videoStreamController;
+        this.frameService = frameService;
         this.cameraRepository = cameraRepository;
     }
 
@@ -216,8 +215,8 @@ public class CameraSnapshotService {
             return;
         }
 
-        // 推帧到 VideoStreamController，前端 /video_feed?cam=cam-10.23.82.101 可消费
-        videoStreamController.updateFrame(image, CAMERA_ID);
+        // 推帧到 FrameService，前端 /video_feed?cam=cam-10.23.82.101 可消费
+        frameService.updateFrame(image, CAMERA_ID);
         log.trace("Frame pushed: camId={}, {}x{}, {} bytes",
                 CAMERA_ID, image.getWidth(), image.getHeight(), body.length);
     }

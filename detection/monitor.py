@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import time
 import logging
 import threading
@@ -21,7 +22,7 @@ except ImportError:
 
 from ultralytics import YOLO
 
-from config import Config, WEB_SERVER_URL, SEND_FRAME_INTERVAL, JPEG_QUALITY, DRAW_OVERLAY
+from config import Config, WEB_SERVER_URL, SEND_FRAME_INTERVAL, JPEG_QUALITY, DRAW_OVERLAY, API_KEY
 from utils import Utils
 from detector import DetectionModule
 from data_saver import DataSaver
@@ -78,6 +79,8 @@ class SecurityMonitor:
         # 是否启用 web 视频流
         self.enable_web_stream = _HAS_REQUESTS
         self.session = requests.Session() if _HAS_REQUESTS else None
+        if self.session and API_KEY:
+            self.session.headers['X-API-Key'] = API_KEY
 
         # 帧大小
         self.web_stream_width = 960
@@ -157,27 +160,6 @@ class SecurityMonitor:
             logger.info("视频尺寸: %dx%d", new_frame_width, new_frame_height)
         return out, (new_frame_width, new_frame_height)
 
-    def send_frame_to_web(self, frame: np.ndarray, cam: str = "0") -> bool:
-        """发送原始视频帧到 web 服务器"""
-        if not self.enable_web_stream or self.session is None:
-            return False
-        try:
-            frame_resized = cv2.resize(frame, (self.web_stream_width, self.web_stream_height))
-            encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
-            _, img_encoded = cv2.imencode('.jpg', frame_resized, encode_params)
-            response = self.session.post(
-                f"{WEB_SERVER_URL}/api/update_frame",
-                files={'frame': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')},
-                data={'cam': cam},
-                timeout=1.5
-            )
-            if response.status_code != 200:
-                logger.warning("[摄像头 %s] 帧上传失败: HTTP %d %s", cam, response.status_code, response.text[:200])
-            return response.status_code == 200
-        except Exception as e:
-            logger.error("[摄像头 %s] 帧上传异常: %s", cam, e)
-            return False
-
     def report_model_info(self):
         """向 Java 后端报告模型信息"""
         if not _HAS_REQUESTS:
@@ -198,9 +180,10 @@ class SecurityMonitor:
                 "gpu_available": Config.DEVICE == "cuda",
                 "half_precision": Config.HALF
             }
-            requests.post(f"{WEB_SERVER_URL}/api/model_info", json=info, timeout=2)
-        except Exception:
-            pass
+            headers = {'X-API-Key': API_KEY} if API_KEY else {}
+            requests.post(f"{WEB_SERVER_URL}/api/model_info", json=info, timeout=2, headers=headers)
+        except Exception as e:
+            logger.warning("模型信息上报失败: %s", e)
 
     def run(self):
         """主运行循环 - 多摄像头模式"""
@@ -270,7 +253,8 @@ class SecurityMonitor:
         source = cam_config["address"]
         cam_name = cam_config["name"]
         cam_type = cam_config["type"]
-        logger.info("[%s] 线程启动，类型: %s，地址: %s", cam_name, cam_type, source)
+        logger.info("[%s] 线程启动，类型: %s，地址: %s", cam_name, cam_type,
+                    re.sub(r'://([^:]+):([^@]+)@', r'://***:***@', str(source)) if source else str(source))
 
         if cam_type == "http_snapshot":
             snapshot_url = source
@@ -303,6 +287,8 @@ class SecurityMonitor:
             test_image = np.zeros((720, 1280, 3), dtype=np.uint8)
 
         session = requests.Session() if _HAS_REQUESTS else None
+        if session and API_KEY:
+            session.headers['X-API-Key'] = API_KEY
 
         prev_centers = []
         last_move_times = []
@@ -378,8 +364,8 @@ class SecurityMonitor:
                     fighting_persons = cached_fighting_persons
                     action_confidences = cached_action_confidences
 
-                # 4. 原始帧
-                frame_out = frame.copy()
+                # 4. 原始帧（仅 overlay 启用时复制，避免不必要的内存拷贝）
+                frame_out = frame.copy() if DRAW_OVERLAY else frame
 
                 # 8. 发送帧到 web（异步）
                 if frame_count % SEND_FRAME_INTERVAL == 0 and session is not None and self._frame_executor is not None:
@@ -428,8 +414,19 @@ class SecurityMonitor:
                 if cam_str == self.config.SOURCES[0]["id"] and frame_count % self.config.SAVE_INTERVAL == 0:
                     timestamp = self.data_saver.save_detection_data(actions, person_num, fps, frame_count,
                                                                      camera_name=cam_name, camera_id=cam_str)
+                    image_path = None
                     if actions:
-                        self.data_saver.save_frame_image(frame, actions, timestamp)
+                        image_path = self.data_saver.save_frame_image(frame, actions, timestamp)
+                    self.data_saver.notify_cicsic_review(
+                        actions,
+                        person_num,
+                        fps,
+                        frame_count,
+                        time.strftime("%Y-%m-%d %H:%M:%S"),
+                        cam_name,
+                        cam_str,
+                        image_path,
+                    )
 
                 # 15. 检查退出
                 if DRAW_OVERLAY and os.isatty(0):

@@ -97,7 +97,11 @@ public class UserService {
                     .orElseThrow(() -> new IllegalArgumentException("用户不存在: " + username));
 
             if (update.getRole() != null) {
-                existing.setRole(update.getRole());
+                String role = update.getRole();
+                if (!role.equals("admin") && !role.equals("operator") && !role.equals("viewer")) {
+                    throw new IllegalArgumentException("无效的角色: " + role + "。允许的角色: admin, operator, viewer");
+                }
+                existing.setRole(role);
             }
 
             if (update.getPassword() != null && !update.getPassword().isEmpty()) {
@@ -170,6 +174,9 @@ public class UserService {
         }
         if (user.getRole() == null || user.getRole().isEmpty()) {
             throw new IllegalArgumentException("角色不能为空");
+        }
+        if (!user.getRole().equals("admin") && !user.getRole().equals("operator") && !user.getRole().equals("viewer")) {
+            throw new IllegalArgumentException("无效的角色: " + user.getRole());
         }
     }
 

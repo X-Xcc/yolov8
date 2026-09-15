@@ -25,7 +25,7 @@ const ICONS = {
   gpu: Zap,
 } as const;
 
-const Gauge = ({ value, label, sub, color, icon: Icon }: { value: number; label: string; sub: string; color: string; icon: any }) => {
+const Gauge = ({ value, label, sub, color, icon: Icon }: { value: number; label: string; sub: string; color: string; icon: React.ComponentType<{ size?: number; className?: string }> }) => {
   const dashArray = (value / 100) * 100;
   return (
     <div className="bg-white border border-outline-variant rounded-xl p-4 flex flex-col items-center gap-2 hover:shadow-md transition-shadow">

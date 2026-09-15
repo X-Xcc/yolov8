@@ -23,28 +23,28 @@ public class AuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
     private static final String HEADER = "X-API-Key";
+    // NOTE: /api/update_frame, /api/model_info, /api/gpu_status, /api/cleanup
+    // now require authentication (API key or JWT)
     private static final String[] PUBLIC_PATHS = {
-        "/", "/index", "/annotation", "/annotation.html",
+        "/", "/index", "/index.html", "/login", "/annotation", "/annotation.html",
         "/training", "/training.html",
-        "/static/**", "/error", "/api/login", "/api/cleanup",
+        "/static/**", "/error", "/api/login",
         "/video_feed", "/api/images/**",
         "/dashboard", "/monitor", "/alerts", "/devices",
         "/evidence", "/analysis", "/maintenance", "/audit",
         "/monitor/**", "/assets/**",
         "/api/detection/status",
-        "/api/annotations/**",
-        "/api/update_frame", "/api/model_info", "/api/gpu_status",
-        "/api/discover",
-        "/api/camera_config", "/api/camera_config/**"
+        "/api/discover"
     };
 
     // GET-only public API paths (monitor dashboard data)
     private static final String[] PUBLIC_GET_API_PATHS = {
         "/api/stats", "/api/stats/summary", "/api/stats/trend",
-        "/api/camera_config", "/api/cameras",
+        "/api/camera_config", "/api/camera_config/**", "/api/cameras",
         "/api/model_info", "/api/ai/status", "/api/system_metrics",
         "/api/system_info", "/api/devices", "/api/me",
-        "/api/alerts", "/api/audit_logs", "/api/sse/stream", "/api/streams/status"
+        "/api/alerts", "/api/audit_logs", "/api/sse/stream", "/api/streams/status",
+        "/api/annotations", "/api/annotations/**"
     };
 
     @Value("${app.api-key:}")

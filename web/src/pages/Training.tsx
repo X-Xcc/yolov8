@@ -166,9 +166,9 @@ export default function Training() {
         previewUrl,
       }]);
       setLogs(prev => [...prev, buildTrainingUploadSuccessLog(file, new Date().toLocaleTimeString("zh-CN", { hour12: false }))]);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setUploads([{ ...item, status: "error", progress: 0 }]);
-      setLogs(prev => [...prev, buildTrainingUploadErrorLog(err.message, new Date().toLocaleTimeString("zh-CN", { hour12: false }))]);
+      setLogs(prev => [...prev, buildTrainingUploadErrorLog(err instanceof Error ? err.message : String(err), new Date().toLocaleTimeString("zh-CN", { hour12: false }))]);
     } finally {
       setUploading(false);
       setUploadProgress(0);

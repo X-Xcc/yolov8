@@ -41,6 +41,7 @@ export async function downloadEvidenceSnapshot(item: EvidenceItem): Promise<void
 
   const url = rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`;
   const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`下载失败: ${res.status}`);
   const blob = await res.blob();
   const objUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');

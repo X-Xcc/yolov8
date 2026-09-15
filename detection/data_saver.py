@@ -2,6 +2,7 @@ import os
 import time
 import json
 import logging
+import threading
 from typing import List
 
 import cv2
@@ -9,6 +10,7 @@ import numpy as np
 
 from config import Config
 from utils import Utils
+from cicsic_notifier import CicsicReviewNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +24,11 @@ class DataSaver:
         self.config = config
         os.makedirs(os.path.dirname(config.RESULT_VIDEO_PATH), exist_ok=True)
         os.makedirs(config.DATASET_DIR, exist_ok=True)
+        self._pending_lock = threading.Lock()
         self._pending_detections = []  # [(timestamp, data, retry_count), ...]
         self._last_flush_time = time.time()
         self._flush_interval = 5.0
+        self.cicsic_notifier = CicsicReviewNotifier()
 
     def save_detection_data(self, actions: List[str], person_count: int, fps: float, frame_count: int,
                             camera_name: str = None, camera_id: str = None) -> str:
@@ -40,10 +44,11 @@ class DataSaver:
             "camera_name": camera_name,
             "camera_id": camera_id
         }
-        self._pending_detections.append((timestamp, detection_data, 0))
-        now = time.time()
-        if now - self._last_flush_time >= self._flush_interval:
-            self._flush()
+        with self._pending_lock:
+            self._pending_detections.append((timestamp, detection_data, 0))
+            now = time.time()
+            if now - self._last_flush_time >= self._flush_interval:
+                self._flush()
         return timestamp
 
     def _get_target_dir(self, actions: List[str]) -> str:
@@ -57,10 +62,14 @@ class DataSaver:
 
     def _flush(self):
         """批量写入待处理的检测数据，失败条目保留重试"""
+        # Must be called with _pending_lock held
         if not self._pending_detections:
             return
+        snapshot = list(self._pending_detections)
+        self._pending_detections = []
+
         still_pending = []
-        for timestamp, data, retry_count in self._pending_detections:
+        for timestamp, data, retry_count in snapshot:
             try:
                 target_dir = self._get_target_dir(data.get("actions", []))
                 json_path = os.path.join(target_dir, f"detection_{timestamp}.json")
@@ -75,16 +84,42 @@ class DataSaver:
         self._pending_detections = still_pending
         self._last_flush_time = time.time()
 
-    def save_frame_image(self, frame: np.ndarray, actions: List[str], timestamp: str) -> None:
+    def save_frame_image(self, frame: np.ndarray, actions: List[str], timestamp: str) -> str | None:
         """保存帧图像（仅当检测到行为时）"""
         if actions and self.config.SAVE_IMAGE_ON_ACTION:
             try:
                 target_dir = self._get_target_dir(actions)
                 frame_path = os.path.join(target_dir, f"frame_{timestamp}.jpg")
-                cv2.imwrite(frame_path, frame)
+                if cv2.imwrite(frame_path, frame):
+                    return frame_path
             except OSError as e:
                 logger.error("保存帧图像失败: %s", e)
+        return None
+
+    def notify_cicsic_review(
+        self,
+        actions: List[str],
+        person_count: int,
+        fps: float,
+        frame_count: int,
+        timestamp: str,
+        camera_name: str | None,
+        camera_id: str | None,
+        image_path: str | None,
+    ) -> bool:
+        """异步上报聚集证据；视频流仍由 YOLO 服务独立管理。"""
+        return self.cicsic_notifier.notify(
+            actions,
+            person_count,
+            fps,
+            frame_count,
+            timestamp,
+            camera_name,
+            camera_id,
+            image_path,
+        )
 
     def flush_remaining(self):
         """进程退出前刷新所有待写数据"""
-        self._flush()
+        with self._pending_lock:
+            self._flush()

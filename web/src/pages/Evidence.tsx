@@ -54,8 +54,8 @@ export default function Evidence() {
   async function downloadImage(item: EvidenceItem) {
     try {
       await downloadEvidenceSnapshot(item);
-    } catch (error: any) {
-      toast.show(error?.message || "下载失败");
+    } catch (error: unknown) {
+      toast.show(error instanceof Error ? error.message : "下载失败");
     }
   }
 

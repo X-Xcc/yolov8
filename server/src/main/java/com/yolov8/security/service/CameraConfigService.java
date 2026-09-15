@@ -15,11 +15,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-// 缓存相关
-import java.util.concurrent.CopyOnWriteArrayList;
 
 // 环境变量占位符替换
 import org.springframework.core.env.Environment;
@@ -72,38 +70,49 @@ public class CameraConfigService {
     }
 
     public List<Camera> getAllCameras() {
+        // Fast path: check volatile (no lock needed if cache is valid)
         long now = System.currentTimeMillis();
-        if (camerasCache != null && (now - camerasCacheTimeMs) < CAMERAS_CACHE_TTL_MS) {
-            return camerasCache;
+        var cached = camerasCache;
+        if (cached != null && (now - camerasCacheTimeMs) < CAMERAS_CACHE_TTL_MS) {
+            return cached;
         }
+        // Slow path: synchronize to avoid duplicate DB + filesystem I/O
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            cached = camerasCache;
+            if (cached != null && (now - camerasCacheTimeMs) < CAMERAS_CACHE_TTL_MS) {
+                return cached;
+            }
 
-        List<Camera> cameras = repository.findAll();
-        // 从 cameras.json 读取 httpMjpegUrl 并合并（使用 JsonNode 树模型，绕开 Camera 反序列化问题）
-        try {
-            if (Files.exists(camerasJsonPath)) {
-                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(camerasJsonPath.toFile());
-                com.fasterxml.jackson.databind.JsonNode arr = root.get("cameras");
-                if (arr != null && arr.isArray()) {
-                    for (com.fasterxml.jackson.databind.JsonNode node : arr) {
-                        String id = node.has("id") ? node.get("id").asText() : null;
-                        String url = node.has("httpMjpegUrl") ? node.get("httpMjpegUrl").asText() : null;
-                        if (id != null && url != null) {
-                            String resolvedUrl = resolveEnvPlaceholders(url);
-                            cameras.stream()
-                                .filter(c -> id.equals(c.getId()))
-                                .findFirst()
-                                .ifPresent(c -> c.setHttpMjpegUrl(resolvedUrl));
+            List<Camera> cameras = repository.findAll();
+            // 从 cameras.json 读取 httpMjpegUrl 并合并（使用 JsonNode 树模型，绕开 Camera 反序列化问题）
+            try {
+                if (Files.exists(camerasJsonPath)) {
+                    com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(camerasJsonPath.toFile());
+                    com.fasterxml.jackson.databind.JsonNode arr = root.get("cameras");
+                    if (arr != null && arr.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode node : arr) {
+                            String id = node.has("id") ? node.get("id").asText() : null;
+                            String url = node.has("httpMjpegUrl") ? node.get("httpMjpegUrl").asText() : null;
+                            if (id != null && url != null) {
+                                String resolvedUrl = resolveEnvPlaceholders(url);
+                                cameras.stream()
+                                    .filter(c -> id.equals(c.getId()))
+                                    .findFirst()
+                                    .ifPresent(c -> c.setHttpMjpegUrl(resolvedUrl));
+                            }
                         }
                     }
                 }
+            } catch (Exception e) {
+                log.debug("合并 httpMjpegUrl 失败: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            log.debug("合并 httpMjpegUrl 失败: {}", e.getMessage());
-        }
 
-        camerasCache = cameras;
-        camerasCacheTimeMs = now;
-        return cameras;
+            List<Camera> immutableCameras = Collections.unmodifiableList(cameras);
+            camerasCache = immutableCameras;
+            camerasCacheTimeMs = now;
+            return immutableCameras;
+        }
     }
 
     /** 缓存失效 — 添加/更新/删除摄像头后调用 */
