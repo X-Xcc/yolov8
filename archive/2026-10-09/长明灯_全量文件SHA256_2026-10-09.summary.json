@@ -1,0 +1,14 @@
+{
+  "root": "D:\\长明灯_YOLOv8_Security_项目总资料",
+  "generated_at_utc": "2026-10-09T03:10:52.409914+00:00",
+  "excluded_directories": [
+    ".git"
+  ],
+  "file_count": 168302,
+  "total_bytes": 18806295803,
+  "manifest": "C:\\Users\\xx\\Documents\\Codex\\2026-10-09\\new-chat\\outputs\\manifests\\长明灯_全量文件SHA256_2026-10-09.csv",
+  "manifest_sha256": "5cdc74b121c85301273a05639699a8692ed5667a0368e841201ea7ec04649926",
+  "non_ok_count": 0,
+  "non_ok_files": [],
+  "duration_seconds": 173.5
+}

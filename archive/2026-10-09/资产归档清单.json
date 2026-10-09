@@ -1,0 +1,32 @@
+{
+  "project": "长明灯",
+  "created_at": "2026-10-09",
+  "format": "tar",
+  "assets": [
+    {
+      "file": "dataset-actions-person-full.tar",
+      "bytes": 1628518912,
+      "sha256": "685e07cd25cb49907c6442bb2d947a1a2d752bd1ebbd3dce2dc50c1194fed252"
+    },
+    {
+      "file": "dataset-actions-person.tar",
+      "bytes": 444749312,
+      "sha256": "d4e683c7f17a054932a61534726b6fa88ab29df9d01d0651f88e7797a5f91276"
+    },
+    {
+      "file": "dataset-actions.tar",
+      "bytes": 1383336960,
+      "sha256": "a595fc584053cded42bd5e388d33c90f0781b14c7cd026664c298efa0cbb0438"
+    },
+    {
+      "file": "dataset-person-full.tar",
+      "bytes": 1513157120,
+      "sha256": "60e147339ff03139f84e8a2e741ee2d1d71a83e7e5e3574c5ae7244171d866df"
+    },
+    {
+      "file": "training-results-and-models.tar",
+      "bytes": 342430720,
+      "sha256": "a987c4b5b0c3c5cd3a8b2c7ac48e220205b5809611bb891d99e773dd48237e37"
+    }
+  ]
+}

@@ -14,6 +14,42 @@ YOLOv8 Security 将 **Python 检测引擎**、**Spring Boot 后端服务** 与 *
 
 ---
 
+## 最终归档与复现
+
+本仓库已于 **2026-10-09** 完成项目封版。源码、训练数据、训练结果和模型归档分别保存在普通 Git 与 Git LFS 中；归档审计报告、全量文件 SHA-256 清单和资产校验值见 [`archive/`](archive/README.md)。
+
+### 1. 拉取完整归档
+
+```powershell
+git clone https://github.com/X-Xcc/yolov8.git
+cd yolov8
+git lfs install
+git lfs pull
+```
+
+仅下载 GitHub 的 Source code ZIP 不会得到 Git LFS 大文件，复现时应使用 Git 克隆并执行 `git lfs pull`。
+
+### 2. 恢复数据与训练产物
+
+在仓库根目录执行：
+
+```powershell
+Get-ChildItem archive/assets/*.tar | ForEach-Object { tar -xf $_.FullName }
+```
+
+归档包括四组训练数据，以及训练运行结果、最终权重、COCO8 样例和基础权重。解包前后可依据 [`archive/2026-10-09/资产归档清单.json`](archive/2026-10-09/资产归档清单.json) 校验文件大小和 SHA-256。
+
+### 3. 复现运行
+
+1. 按下方“环境要求”安装 Java、Python、Node.js 和 Maven。
+2. 首次验证建议先执行 `start.bat --no-python`，确认前后端可以访问。
+3. 再安装 `detection/requirements.txt`，使用离线视频或样例数据验证检测端。
+4. 最后再配置真实摄像头、RTSP、go2rtc 和可选的 Qwen 服务。
+
+真实 `.env`、摄像头密码、JWT 密钥、运行数据库和依赖缓存未进入公开仓库，复现部署时必须重新配置。
+
+---
+
 ## 效果预览
 
 ### 登录页
